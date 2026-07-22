@@ -1,0 +1,17 @@
+.venv/
+venv/
+.env/
+
+**/__pycache/
+**/*.pyc
+
+**/*.env
+**/*.secret
+**/*.pem
+**/*.key
+
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+**/*.log
