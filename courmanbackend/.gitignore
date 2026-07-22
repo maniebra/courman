@@ -2,7 +2,7 @@
 venv/
 .env/
 
-**/__pycache/
+**/__pycache__/
 **/*.pyc
 
 **/*.env
@@ -15,3 +15,6 @@ venv/
 **/*.sqlite3
 
 **/*.log
+
+staticfiles/
+media/

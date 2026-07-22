@@ -18,10 +18,16 @@ from django.contrib import admin
 from django.urls import path
 from ninja import NinjaAPI
 
+from courses.views import api as courses_api
+from grading.views import api as grading_api
 from iam.views import api as iam_api
+from profiles.views import api as profiles_api
 
 api = NinjaAPI(title="Courman API", version="1.0.0")
 api.add_router("/iam/", iam_api)
+api.add_router("/profiles/", profiles_api)
+api.add_router("/courses/", courses_api)
+api.add_router("/grading/", grading_api)
 
 urlpatterns = [
     path('admin/', admin.site.urls),

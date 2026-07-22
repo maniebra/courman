@@ -1,3 +1,10 @@
 from django.contrib import admin
 
-# Register your models here.
+from courses.models import Course
+
+
+@admin.register(Course)
+class CourseAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "created_at", "updated_at")
+    search_fields = ("code", "name")
+    filter_horizontal = ("professors", "head_tas", "tas")

@@ -5,6 +5,18 @@ from ninja import ModelSchema, Schema
 from iam.models import Role, RoleAction, User
 
 
+class UserBriefSchema(ModelSchema):
+    """Lightweight user representation for embedding in other apps' schemas.
+
+    Unlike UserSchema, this excludes `roles` so callers don't need to
+    prefetch_related("roles__actions") just to nest a user in a response.
+    """
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "first_name", "last_name"]
+
+
 class RoleActionSchema(ModelSchema):
     class Meta:
         model = RoleAction
