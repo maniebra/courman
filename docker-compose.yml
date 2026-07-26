@@ -1,0 +1,3 @@
+include:
+  - courmanbackend/docker-compose.yml
+  - courmanfrontend/docker-compose.yml

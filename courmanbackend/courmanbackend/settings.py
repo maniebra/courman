@@ -36,6 +36,17 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
 
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h]
 
+# The frontend dev server proxies /api/* to us, but the browser's Origin
+# header still names its own origin, which Django's CSRF check requires be
+# listed here explicitly (DEBUG's localhost allowance only covers ALLOWED_HOSTS).
+CSRF_TRUSTED_ORIGINS = [
+    o
+    for o in os.environ.get(
+        "DJANGO_CSRF_TRUSTED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",")
+    if o
+]
+
 
 # Application definition
 

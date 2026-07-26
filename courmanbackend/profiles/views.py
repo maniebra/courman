@@ -1,10 +1,9 @@
 from ninja import File, Router
-from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from ninja.pagination import paginate
 from ninja.security import SessionAuth, SessionAuthIsStaff
 
-from profiles.models import Profile
+from commons.crud import aget_or_404
 from profiles.repository import ProfileRepository
 from profiles.schemas import ProfileSchema, ProfileUpdateSchema
 
@@ -39,7 +38,4 @@ async def list_profiles(request):
 
 @api.get("/{user_id}", response=ProfileSchema, auth=staff_auth)
 async def get_profile(request, user_id: int):
-    try:
-        return await ProfileRepository.get_profile(user_id)
-    except Profile.DoesNotExist:
-        raise HttpError(404, "Profile not found")
+    return await aget_or_404(ProfileRepository.get_profile(user_id), "Profile not found")

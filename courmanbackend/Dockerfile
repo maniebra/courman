@@ -1,12 +1,9 @@
 FROM python:3.14-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy
+    PYTHONUNBUFFERED=1 
 
-# psycopg[binary] vendors its own libpq, so no system postgres client lib is needed.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+RUN pip install uv
 
 WORKDIR /app
 

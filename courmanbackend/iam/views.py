@@ -1,10 +1,12 @@
 from django.contrib.auth import aauthenticate, alogin, alogout
 from django.db import IntegrityError
+from django.middleware.csrf import get_token
 from ninja import Router
 from ninja.errors import HttpError
 from ninja.pagination import paginate
 from ninja.security import SessionAuth, SessionAuthIsStaff
 
+from commons.crud import ModelCrudView, aget_or_404
 from iam.models import Role, RoleAction, User
 from iam.repository import RoleActionRepository, RoleRepository, UserRepository
 from iam.schemas import (
@@ -45,6 +47,10 @@ async def login(request, payload: LoginSchema):
     if user is None:
         raise HttpError(401, "Invalid credentials")
     await alogin(request, user)
+    # Session-authed endpoints check CSRF, but the cookie is only ever sent to
+    # the browser once something calls get_token() - do it here so the SPA
+    # has a token for the mutating requests it makes right after login.
+    get_token(request)
     return await UserRepository.get_user(user.id)
 
 
@@ -56,6 +62,7 @@ async def logout(request):
 
 @auth_router.get("/me", response=UserSchema, auth=session_auth)
 async def me(request):
+    get_token(request)
     return await UserRepository.get_user(request.auth.id)
 
 
@@ -64,72 +71,61 @@ async def me(request):
 users_router = Router(tags=["users"], auth=staff_auth)
 
 
-@users_router.get("/", response=list[UserSchema])
+class UserCrud(ModelCrudView[User]):
+    schema = UserSchema
+    create_schema = UserCreateSchema
+    update_schema = UserUpdateSchema
+    list_fn = staticmethod(UserRepository.list_users)
+    get_fn = staticmethod(UserRepository.get_user)
+    create_fn = staticmethod(UserRepository.create_user)
+    update_fn = staticmethod(UserRepository.update_user)
+    delete_fn = staticmethod(UserRepository.delete_user)
+    not_found_message = "User not found"
+    conflict_message = "A user with that username already exists"
+    deleted_message = "User deleted"
+
+
+user_crud = UserCrud()
+
+
+@users_router.get("/", response=list[UserCrud.schema])
 @paginate
 async def list_users(request):
-    return UserRepository.list_users()
+    return user_crud.list()
 
 
-@users_router.get("/{user_id}", response=UserSchema)
+@users_router.get("/{user_id}", response=UserCrud.schema)
 async def get_user(request, user_id: int):
-    try:
-        return await UserRepository.get_user(user_id)
-    except User.DoesNotExist:
-        raise HttpError(404, "User not found")
+    return await user_crud.retrieve(user_id)
 
 
-@users_router.post("/", response={201: UserSchema})
-async def create_user(request, payload: UserCreateSchema):
-    try:
-        user = await UserRepository.create_user(**payload.dict())
-    except IntegrityError:
-        raise HttpError(409, "A user with that username already exists")
-    return 201, user
+@users_router.post("/", response={201: UserCrud.schema})
+async def create_user(request, payload: UserCrud.create_schema):
+    return 201, await user_crud.create(payload)
 
 
-@users_router.patch("/{user_id}", response=UserSchema)
-async def update_user(request, user_id: int, payload: UserUpdateSchema):
-    try:
-        user = await UserRepository.get_user(user_id)
-    except User.DoesNotExist:
-        raise HttpError(404, "User not found")
-    return await UserRepository.update_user(user, **payload.dict(exclude_unset=True))
+@users_router.patch("/{user_id}", response=UserCrud.schema)
+async def update_user(request, user_id: int, payload: UserCrud.update_schema):
+    return await user_crud.update(user_id, payload)
 
 
 @users_router.delete("/{user_id}", response=MessageSchema)
 async def delete_user(request, user_id: int):
-    try:
-        user = await UserRepository.get_user(user_id)
-    except User.DoesNotExist:
-        raise HttpError(404, "User not found")
-    await UserRepository.delete_user(user)
-    return {"detail": "User deleted"}
+    return await user_crud.destroy(user_id)
 
 
 @users_router.post("/{user_id}/roles/{role_id}", response=UserSchema)
 async def assign_role_to_user(request, user_id: int, role_id: int):
-    try:
-        user = await UserRepository.get_user(user_id)
-    except User.DoesNotExist:
-        raise HttpError(404, "User not found")
-    try:
-        role = await RoleRepository.get_role(role_id)
-    except Role.DoesNotExist:
-        raise HttpError(404, "Role not found")
+    user = await aget_or_404(UserRepository.get_user(user_id), "User not found")
+    role = await aget_or_404(RoleRepository.get_role(role_id), "Role not found")
     await UserRepository.add_role(user, role)
     return await UserRepository.get_user(user_id)
 
 
 @users_router.delete("/{user_id}/roles/{role_id}", response=UserSchema)
 async def remove_role_from_user(request, user_id: int, role_id: int):
-    try:
-        user = await UserRepository.get_user(user_id)
-    except User.DoesNotExist:
-        raise HttpError(404, "User not found")
-    try:
-        role = await RoleRepository.get_role(role_id)
-    except Role.DoesNotExist:
-        raise HttpError(404, "Role not found")
+    user = await aget_or_404(UserRepository.get_user(user_id), "User not found")
+    role = await aget_or_404(RoleRepository.get_role(role_id), "Role not found")
     await UserRepository.remove_role(user, role)
     return await UserRepository.get_user(user_id)
 
@@ -139,75 +135,61 @@ async def remove_role_from_user(request, user_id: int, role_id: int):
 roles_router = Router(tags=["roles"], auth=staff_auth)
 
 
-@roles_router.get("/", response=list[RoleSchema])
+class RoleCrud(ModelCrudView[Role]):
+    schema = RoleSchema
+    create_schema = RoleCreateSchema
+    update_schema = RoleUpdateSchema
+    list_fn = staticmethod(RoleRepository.list_roles)
+    get_fn = staticmethod(RoleRepository.get_role)
+    create_fn = staticmethod(RoleRepository.create_role)
+    update_fn = staticmethod(RoleRepository.update_role)
+    delete_fn = staticmethod(RoleRepository.delete_role)
+    not_found_message = "Role not found"
+    conflict_message = "A role with that name already exists"
+    deleted_message = "Role deleted"
+
+
+role_crud = RoleCrud()
+
+
+@roles_router.get("/", response=list[RoleCrud.schema])
 @paginate
 async def list_roles(request):
-    return RoleRepository.list_roles()
+    return role_crud.list()
 
 
-@roles_router.get("/{role_id}", response=RoleSchema)
+@roles_router.get("/{role_id}", response=RoleCrud.schema)
 async def get_role(request, role_id: int):
-    try:
-        return await RoleRepository.get_role(role_id)
-    except Role.DoesNotExist:
-        raise HttpError(404, "Role not found")
+    return await role_crud.retrieve(role_id)
 
 
-@roles_router.post("/", response={201: RoleSchema})
-async def create_role(request, payload: RoleCreateSchema):
-    try:
-        role = await RoleRepository.create_role(**payload.dict())
-    except IntegrityError:
-        raise HttpError(409, "A role with that name already exists")
-    return 201, role
+@roles_router.post("/", response={201: RoleCrud.schema})
+async def create_role(request, payload: RoleCrud.create_schema):
+    return 201, await role_crud.create(payload)
 
 
-@roles_router.patch("/{role_id}", response=RoleSchema)
-async def update_role(request, role_id: int, payload: RoleUpdateSchema):
-    try:
-        role = await RoleRepository.get_role(role_id)
-    except Role.DoesNotExist:
-        raise HttpError(404, "Role not found")
-    try:
-        return await RoleRepository.update_role(role, **payload.dict(exclude_unset=True))
-    except IntegrityError:
-        raise HttpError(409, "A role with that name already exists")
+@roles_router.patch("/{role_id}", response=RoleCrud.schema)
+async def update_role(request, role_id: int, payload: RoleCrud.update_schema):
+    return await role_crud.update(role_id, payload)
 
 
 @roles_router.delete("/{role_id}", response=MessageSchema)
 async def delete_role(request, role_id: int):
-    try:
-        role = await RoleRepository.get_role(role_id)
-    except Role.DoesNotExist:
-        raise HttpError(404, "Role not found")
-    await RoleRepository.delete_role(role)
-    return {"detail": "Role deleted"}
+    return await role_crud.destroy(role_id)
 
 
 @roles_router.post("/{role_id}/actions/{action_id}", response=RoleSchema)
 async def assign_action_to_role(request, role_id: int, action_id: int):
-    try:
-        role = await RoleRepository.get_role(role_id)
-    except Role.DoesNotExist:
-        raise HttpError(404, "Role not found")
-    try:
-        action = await RoleActionRepository.get_action(action_id)
-    except RoleAction.DoesNotExist:
-        raise HttpError(404, "Action not found")
+    role = await aget_or_404(RoleRepository.get_role(role_id), "Role not found")
+    action = await aget_or_404(RoleActionRepository.get_action(action_id), "Action not found")
     await RoleRepository.add_action(role, action)
     return await RoleRepository.get_role(role_id)
 
 
 @roles_router.delete("/{role_id}/actions/{action_id}", response=RoleSchema)
 async def remove_action_from_role(request, role_id: int, action_id: int):
-    try:
-        role = await RoleRepository.get_role(role_id)
-    except Role.DoesNotExist:
-        raise HttpError(404, "Role not found")
-    try:
-        action = await RoleActionRepository.get_action(action_id)
-    except RoleAction.DoesNotExist:
-        raise HttpError(404, "Action not found")
+    role = await aget_or_404(RoleRepository.get_role(role_id), "Role not found")
+    action = await aget_or_404(RoleActionRepository.get_action(action_id), "Action not found")
     await RoleRepository.remove_action(role, action)
     return await RoleRepository.get_role(role_id)
 
@@ -217,49 +199,47 @@ async def remove_action_from_role(request, role_id: int, action_id: int):
 actions_router = Router(tags=["actions"], auth=staff_auth)
 
 
-@actions_router.get("/", response=list[RoleActionSchema])
+class ActionCrud(ModelCrudView[RoleAction]):
+    schema = RoleActionSchema
+    create_schema = RoleActionCreateSchema
+    update_schema = RoleActionUpdateSchema
+    list_fn = staticmethod(RoleActionRepository.list_actions)
+    get_fn = staticmethod(RoleActionRepository.get_action)
+    create_fn = staticmethod(RoleActionRepository.create_action)
+    update_fn = staticmethod(RoleActionRepository.update_action)
+    delete_fn = staticmethod(RoleActionRepository.delete_action)
+    not_found_message = "Action not found"
+    conflict_message = "An action with that name already exists"
+    deleted_message = "Action deleted"
+
+
+action_crud = ActionCrud()
+
+
+@actions_router.get("/", response=list[ActionCrud.schema])
 @paginate
 async def list_actions(request):
-    return RoleActionRepository.list_actions()
+    return action_crud.list()
 
 
-@actions_router.get("/{action_id}", response=RoleActionSchema)
+@actions_router.get("/{action_id}", response=ActionCrud.schema)
 async def get_action(request, action_id: int):
-    try:
-        return await RoleActionRepository.get_action(action_id)
-    except RoleAction.DoesNotExist:
-        raise HttpError(404, "Action not found")
+    return await action_crud.retrieve(action_id)
 
 
-@actions_router.post("/", response={201: RoleActionSchema})
-async def create_action(request, payload: RoleActionCreateSchema):
-    try:
-        action = await RoleActionRepository.create_action(**payload.dict())
-    except IntegrityError:
-        raise HttpError(409, "An action with that name already exists")
-    return 201, action
+@actions_router.post("/", response={201: ActionCrud.schema})
+async def create_action(request, payload: ActionCrud.create_schema):
+    return 201, await action_crud.create(payload)
 
 
-@actions_router.patch("/{action_id}", response=RoleActionSchema)
-async def update_action(request, action_id: int, payload: RoleActionUpdateSchema):
-    try:
-        action = await RoleActionRepository.get_action(action_id)
-    except RoleAction.DoesNotExist:
-        raise HttpError(404, "Action not found")
-    try:
-        return await RoleActionRepository.update_action(action, **payload.dict(exclude_unset=True))
-    except IntegrityError:
-        raise HttpError(409, "An action with that name already exists")
+@actions_router.patch("/{action_id}", response=ActionCrud.schema)
+async def update_action(request, action_id: int, payload: ActionCrud.update_schema):
+    return await action_crud.update(action_id, payload)
 
 
 @actions_router.delete("/{action_id}", response=MessageSchema)
 async def delete_action(request, action_id: int):
-    try:
-        action = await RoleActionRepository.get_action(action_id)
-    except RoleAction.DoesNotExist:
-        raise HttpError(404, "Action not found")
-    await RoleActionRepository.delete_action(action)
-    return {"detail": "Action deleted"}
+    return await action_crud.destroy(action_id)
 
 
 # --- combined router --------------------------------------------------------

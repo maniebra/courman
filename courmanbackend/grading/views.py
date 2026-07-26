@@ -5,7 +5,7 @@ from ninja.security import SessionAuth
 
 from courses.models import Course
 from courses.repository import CourseRepository
-from grading.models import GradingComponent, GradingTask
+from commons.crud import aget_or_404
 from grading.repository import GradingComponentRepository, GradingTaskRepository
 from grading.schemas import (
     GradingComponentCreateSchema,
@@ -24,17 +24,11 @@ api = Router(tags=["grading"])
 
 
 async def _get_course_or_404(course_id: int) -> Course:
-    try:
-        return await CourseRepository.get_course(course_id)
-    except Course.DoesNotExist:
-        raise HttpError(404, "Course not found")
+    return await aget_or_404(CourseRepository.get_course(course_id), "Course not found")
 
 
-async def _get_component_or_404(component_id: int) -> GradingComponent:
-    try:
-        return await GradingComponentRepository.get_component(component_id)
-    except GradingComponent.DoesNotExist:
-        raise HttpError(404, "Grading component not found")
+async def _get_component_or_404(component_id: int):
+    return await aget_or_404(GradingComponentRepository.get_component(component_id), "Grading component not found")
 
 
 async def _require_professor_or_head_ta(course: Course, user: User) -> None:
@@ -90,10 +84,7 @@ async def create_task(request, component_id: int, payload: GradingTaskCreateSche
     requester: User = request.auth
     await _require_professor_or_head_ta(course, requester)
 
-    try:
-        assignee = await UserRepository.get_user(payload.assigned_to_id)
-    except User.DoesNotExist:
-        raise HttpError(404, "User not found")
+    assignee = await aget_or_404(UserRepository.get_user(payload.assigned_to_id), "User not found")
 
     is_self = assignee.pk == requester.pk
     if not is_self and not await CourseRepository.is_ta(course, assignee):
@@ -109,10 +100,7 @@ async def create_task(request, component_id: int, payload: GradingTaskCreateSche
 
 @api.delete("/tasks/{task_id}", response=MessageSchema, auth=session_auth)
 async def delete_task(request, task_id: int):
-    try:
-        task = await GradingTaskRepository.get_task(task_id)
-    except GradingTask.DoesNotExist:
-        raise HttpError(404, "Grading task not found")
+    task = await aget_or_404(GradingTaskRepository.get_task(task_id), "Grading task not found")
     await _require_professor_or_head_ta(task.component.course, request.auth)
     await GradingTaskRepository.delete_task(task)
     return {"detail": "Grading task deleted"}
