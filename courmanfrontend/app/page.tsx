@@ -30,7 +30,7 @@ export default function Home() {
   useEffect(() => {
     api
       .get<User>("/iam/auth/me")
-      .then(() => router.replace("/admin"))
+      .then(() => router.replace("/panel"))
       .catch(() => setChecking(false));
   }, [router]);
 
@@ -40,7 +40,7 @@ export default function Home() {
     setLoading(true);
     try {
       await api.post<User>("/iam/auth/login", { username, password });
-      router.replace("/admin");
+      router.replace("/panel");
     } catch (err) {
       setError(errorMessage(err, t("login.invalid")));
       setLoading(false);

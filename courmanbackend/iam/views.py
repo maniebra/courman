@@ -10,6 +10,7 @@ from commons.crud import ModelCrudView, aget_or_404
 from iam.models import Role, RoleAction, User
 from iam.repository import RoleActionRepository, RoleRepository, UserRepository
 from iam.schemas import (
+    UserBriefSchema,
     LoginSchema,
     MessageSchema,
     RoleActionCreateSchema,
@@ -92,6 +93,19 @@ user_crud = UserCrud()
 @paginate
 async def list_users(request):
     return user_crud.list()
+
+
+@users_router.get("/lookup", response=list[UserBriefSchema], auth=session_auth)
+async def lookup_users(request, q: str = "", limit: int = 20):
+    """Username search for any signed-in user.
+
+    Course managers need to pick people (students, graders) without being staff,
+    so this returns the brief representation only - no roles, no email.
+    """
+    users = UserRepository.list_users()
+    if q:
+        users = users.filter(username__icontains=q)
+    return [user async for user in users[: min(limit, 50)]]
 
 
 @users_router.get("/{user_id}", response=UserCrud.schema)

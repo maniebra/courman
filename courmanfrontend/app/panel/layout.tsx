@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, LogOut } from "lucide-react";
 
-import { api, type User } from "@/lib/api";
+import { api } from "@/lib/api";
 import { resources } from "@/lib/resources";
+import { SessionProvider, useSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleToggle } from "@/components/locale-toggle";
@@ -27,30 +27,41 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function PanelLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <SessionProvider
+      fallback={
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+        </div>
+      }
+    >
+      <PanelShell>{children}</PanelShell>
+    </SessionProvider>
+  );
+}
+
+function PanelShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { t, locale } = useI18n();
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    api
-      .get<User>("/iam/auth/me")
-      .then((res) => setUser(res.data))
-      .catch(() => router.replace("/"));
-  }, [router]);
-
-  if (!user) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-      </div>
-    );
-  }
+  const { user } = useSession();
 
   const nav = [
-    { href: "/admin", label: t("nav.dashboard"), icon: LayoutDashboard },
-    ...resources.map((r) => ({ href: `/admin/${r.key}`, label: t(r.labelKey), icon: r.icon })),
+    { href: "/panel", label: t("nav.dashboard"), icon: LayoutDashboard },
+    ...resources
+      .filter((r) => r.visible(user))
+      .map((r) => ({
+        href: `/panel/${r.key}`,
+        label: t(r.labelKey),
+        icon: r.icon,
+      })),
   ];
 
   async function handleLogout() {
@@ -73,7 +84,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
                       isActive={
-                        item.href === "/admin"
+                        item.href === "/panel"
                           ? pathname === item.href
                           : pathname.startsWith(item.href)
                       }

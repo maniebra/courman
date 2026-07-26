@@ -1,5 +1,6 @@
 import { BookOpen, KeyRound, Shield, Users, type LucideIcon } from "lucide-react";
 
+import type { User } from "@/lib/api";
 import type { Key } from "@/lib/i18n";
 
 export type Field = {
@@ -39,7 +40,12 @@ export type Resource = {
   link?: Link;
   /** rows link to a dedicated page when set */
   detailPath?: (id: number) => string;
+  /** mirrors what the API actually enforces, so we never show a dead end */
+  visible: (user: User) => boolean;
+  canWrite: (user: User) => boolean;
 };
+
+const isStaff = (user: User) => user.is_staff;
 
 const names = (v: unknown, key = "name") =>
   Array.isArray(v) ? v.map((o) => String(o[key])).join(", ") || "—" : "—";
@@ -51,6 +57,8 @@ export const resources: Resource[] = [
     singularKey: "res.user",
     icon: Users,
     basePath: "/iam/users",
+    visible: isStaff,
+    canWrite: isStaff,
     columns: [
       { labelKey: "field.username", render: (r) => String(r.username) },
       {
@@ -82,6 +90,8 @@ export const resources: Resource[] = [
     singularKey: "res.role",
     icon: Shield,
     basePath: "/iam/roles",
+    visible: isStaff,
+    canWrite: isStaff,
     columns: [
       { labelKey: "field.name", render: (r) => String(r.name) },
       { labelKey: "field.actions", render: (r) => names(r.actions) },
@@ -96,6 +106,8 @@ export const resources: Resource[] = [
     singularKey: "res.action",
     icon: KeyRound,
     basePath: "/iam/actions",
+    visible: isStaff,
+    canWrite: isStaff,
     columns: [{ labelKey: "field.name", render: (r) => String(r.name) }],
     createFields: [{ name: "name", labelKey: "field.name", required: true }],
     updateFields: [{ name: "name", labelKey: "field.name", required: true }],
@@ -106,23 +118,28 @@ export const resources: Resource[] = [
     singularKey: "res.course",
     icon: BookOpen,
     basePath: "/courses",
+    visible: () => true,
+    canWrite: isStaff,
     columns: [
       { labelKey: "field.code", render: (r) => String(r.code) },
       { labelKey: "field.name", render: (r) => String(r.name) },
+      { labelKey: "field.semester", render: (r) => String(r.semester || "—") },
       { labelKey: "field.description", render: (r) => String(r.description || "—") },
       { labelKey: "field.staff", render: (r) => names(r.professors, "username") },
     ],
     createFields: [
       { name: "code", labelKey: "field.code", required: true },
       { name: "name", labelKey: "field.name", required: true },
+      { name: "semester", labelKey: "field.semester" },
       { name: "description", labelKey: "field.description", type: "textarea" },
     ],
     updateFields: [
       { name: "code", labelKey: "field.code", required: true },
       { name: "name", labelKey: "field.name", required: true },
+      { name: "semester", labelKey: "field.semester" },
       { name: "description", labelKey: "field.description", type: "textarea" },
     ],
-    detailPath: (id) => `/admin/courses/${id}`,
+    detailPath: (id) => `/panel/courses/${id}`,
   },
 ];
 

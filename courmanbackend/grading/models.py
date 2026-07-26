@@ -35,3 +35,53 @@ class GradingTask(models.Model):
 
     def __str__(self):
         return f"{self.assigned_to} grades {self.component}"
+
+
+class GradingSheet(models.Model):
+    """The score matrix for one grading component: sub-grades down the columns,
+    the course's students down the rows."""
+
+    component = models.OneToOneField(GradingComponent, related_name="sheet", on_delete=models.CASCADE)
+    title = models.CharField(max_length=128)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.component} sheet"
+
+
+class SubGrade(models.Model):
+    sheet = models.ForeignKey(GradingSheet, related_name="subgrades", on_delete=models.CASCADE)
+    name = models.CharField(max_length=128)
+    max_score = models.DecimalField(max_digits=6, decimal_places=2, default=100)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["id"]
+        unique_together = ["sheet", "name"]
+
+    def __str__(self):
+        return f"{self.sheet} - {self.name}"
+
+
+class Score(models.Model):
+    subgrade = models.ForeignKey(SubGrade, related_name="scores", on_delete=models.CASCADE)
+    student = models.ForeignKey("courses.Student", related_name="scores", on_delete=models.CASCADE)
+    value = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    comment = models.TextField(blank=True, default="")
+    graded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, related_name="given_scores", on_delete=models.SET_NULL, null=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["subgrade", "student"]
+        unique_together = ["subgrade", "student"]
+
+    def __str__(self):
+        return f"{self.student} - {self.subgrade}: {self.value}"

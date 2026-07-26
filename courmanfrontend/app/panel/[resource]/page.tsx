@@ -7,8 +7,14 @@ import { ExternalLink, Pencil, Plus, Trash2, Link2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, errorMessage, listAll } from "@/lib/api";
-import { getResource, type Field, type Resource, type Row } from "@/lib/resources";
+import {
+  getResource,
+  type Field,
+  type Resource,
+  type Row,
+} from "@/lib/resources";
 import { useI18n } from "@/lib/i18n";
+import { useSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,14 +37,17 @@ import {
 
 export default function ResourcePage() {
   const { resource: key } = useParams<{ resource: string }>();
+  const { user } = useSession();
   const resource = getResource(key);
-  if (!resource) notFound();
+  if (!resource || !resource.visible(user)) notFound();
   // key in the route changes => remount, so per-resource state never leaks
   return <ResourceCrud key={key} resource={resource} />;
 }
 
 function ResourceCrud({ resource }: { resource: Resource }) {
   const { t } = useI18n();
+  const { user } = useSession();
+  const canWrite = resource.canWrite(user);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [linking, setLinking] = useState<Row | null>(null);
@@ -48,7 +57,9 @@ function ResourceCrud({ resource }: { resource: Resource }) {
       const { items } = await listAll<Row>(resource.basePath);
       setRows(items);
     } catch (err) {
-      toast.error(errorMessage(err, t("err.load", { item: t(resource.labelKey) })));
+      toast.error(
+        errorMessage(err, t("err.load", { item: t(resource.labelKey) })),
+      );
       setRows([]);
     }
   }, [resource, t]);
@@ -59,7 +70,8 @@ function ResourceCrud({ resource }: { resource: Resource }) {
   }, [load]);
 
   async function handleDelete(row: Row) {
-    if (!confirm(t("common.deleteConfirm", { item: t(resource.singularKey) }))) return;
+    if (!confirm(t("common.deleteConfirm", { item: t(resource.singularKey) })))
+      return;
     try {
       await api.delete(`${resource.basePath}/${row.id}`);
       toast.success(t("common.deleted"));
@@ -73,9 +85,11 @@ function ResourceCrud({ resource }: { resource: Resource }) {
     <>
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">{t(resource.labelKey)}</h1>
-        <Button onClick={() => setEditing("new")}>
-          <Plus /> {t("common.new")}
-        </Button>
+        {canWrite && (
+          <Button onClick={() => setEditing("new")}>
+            <Plus /> {t("common.new")}
+          </Button>
+        )}
       </div>
 
       <Table>
@@ -90,14 +104,16 @@ function ResourceCrud({ resource }: { resource: Resource }) {
         <TableBody>
           {rows === null && (
             <TableRow>
-              <TableCell colSpan={resource.columns.length + 1}>{t("common.loading")}</TableCell>
+              <TableCell colSpan={resource.columns.length + 1}>
+                {t("common.loading")}
+              </TableCell>
             </TableRow>
           )}
           {rows?.length === 0 && (
             <TableRow>
               <TableCell colSpan={resource.columns.length + 1}>
-                  {t("common.nothingHere")}
-                </TableCell>
+                {t("common.nothingHere")}
+              </TableCell>
             </TableRow>
           )}
           {rows?.map((row) => (
@@ -126,7 +142,7 @@ function ResourceCrud({ resource }: { resource: Resource }) {
                     <ExternalLink /> {t("common.manage")}
                   </Button>
                 )}
-                {resource.link && (
+                {canWrite && resource.link && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -136,22 +152,26 @@ function ResourceCrud({ resource }: { resource: Resource }) {
                     <Link2 />
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title={t("common.edit")}
-                  onClick={() => setEditing(row)}
-                >
-                  <Pencil />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title={t("common.delete")}
-                  onClick={() => handleDelete(row)}
-                >
-                  <Trash2 />
-                </Button>
+                {canWrite && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title={t("common.edit")}
+                      onClick={() => setEditing(row)}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title={t("common.delete")}
+                      onClick={() => handleDelete(row)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </>
+                )}
               </TableCell>
             </TableRow>
           ))}
@@ -195,7 +215,9 @@ function RowDialog({
     Object.fromEntries(
       fields.map((f) => [
         f.name,
-        f.type === "checkbox" ? Boolean(row?.[f.name] ?? true) : String(row?.[f.name] ?? ""),
+        f.type === "checkbox"
+          ? Boolean(row?.[f.name] ?? true)
+          : String(row?.[f.name] ?? ""),
       ]),
     ),
   );
@@ -326,7 +348,9 @@ function LinkDialog({
         </DialogHeader>
         <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
           {options === null && (
-            <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("common.loading")}
+            </p>
           )}
           {options?.map((o) => (
             <label key={o.id} className="flex items-center gap-2 text-sm">
