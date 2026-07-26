@@ -9,6 +9,8 @@ import { api, type User } from "@/lib/api";
 import { resources } from "@/lib/resources";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LocaleToggle } from "@/components/locale-toggle";
+import { useI18n } from "@/lib/i18n";
 import {
   Sidebar,
   SidebarContent,
@@ -28,6 +30,7 @@ import {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { t, locale } = useI18n();
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -40,14 +43,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!user) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </div>
     );
   }
 
   const nav = [
-    { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-    ...resources.map((r) => ({ href: `/admin/${r.key}`, label: r.label, icon: r.icon })),
+    { href: "/admin", label: t("nav.dashboard"), icon: LayoutDashboard },
+    ...resources.map((r) => ({ href: `/admin/${r.key}`, label: t(r.labelKey), icon: r.icon })),
   ];
 
   async function handleLogout() {
@@ -57,13 +60,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <SidebarProvider>
-      <Sidebar>
+      <Sidebar side={locale === "fa" ? "right" : "left"}>
         <SidebarHeader className="px-4 py-3 font-heading text-lg font-semibold">
           Courman
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>Manage</SidebarGroupLabel>
+            <SidebarGroupLabel>{t("nav.manage")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {nav.map((item) => (
@@ -86,9 +89,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="gap-2 p-3">
-          <p className="text-xs text-muted-foreground">Signed in as {user.username}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("common.signedInAs", { name: user.username })}
+          </p>
           <Button variant="outline" size="sm" onClick={handleLogout}>
-            <LogOut /> Log out
+            <LogOut /> {t("common.logout")}
           </Button>
         </SidebarFooter>
       </Sidebar>
@@ -96,9 +101,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <header className="flex h-14 items-center gap-2 border-b px-4">
           <SidebarTrigger />
           <span className="text-sm font-medium">
-            {nav.find((n) => n.href === pathname)?.label ?? "Admin"}
+            {nav.find((n) => n.href === pathname)?.label ?? t("nav.admin")}
           </span>
-          <div className="ml-auto">
+          <div className="ms-auto flex gap-1">
+            <LocaleToggle />
             <ThemeToggle />
           </div>
         </header>

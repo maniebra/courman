@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { api, errorMessage, listAll } from "@/lib/api";
 import { getResource, type Field, type Resource, type Row } from "@/lib/resources";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +38,7 @@ export default function ResourcePage() {
 }
 
 function ResourceCrud({ resource }: { resource: Resource }) {
+  const { t } = useI18n();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [linking, setLinking] = useState<Row | null>(null);
@@ -46,10 +48,10 @@ function ResourceCrud({ resource }: { resource: Resource }) {
       const { items } = await listAll<Row>(resource.basePath);
       setRows(items);
     } catch (err) {
-      toast.error(errorMessage(err, `Could not load ${resource.label.toLowerCase()}`));
+      toast.error(errorMessage(err, t("err.load", { item: t(resource.labelKey) })));
       setRows([]);
     }
-  }, [resource]);
+  }, [resource, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- setState happens after await
@@ -57,22 +59,22 @@ function ResourceCrud({ resource }: { resource: Resource }) {
   }, [load]);
 
   async function handleDelete(row: Row) {
-    if (!confirm(`Delete this ${resource.label.slice(0, -1).toLowerCase()}?`)) return;
+    if (!confirm(t("common.deleteConfirm", { item: t(resource.singularKey) }))) return;
     try {
       await api.delete(`${resource.basePath}/${row.id}`);
-      toast.success("Deleted");
+      toast.success(t("common.deleted"));
       load();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not delete"));
+      toast.error(errorMessage(err, t("err.delete")));
     }
   }
 
   return (
     <>
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{resource.label}</h1>
+        <h1 className="text-xl font-semibold">{t(resource.labelKey)}</h1>
         <Button onClick={() => setEditing("new")}>
-          <Plus /> New
+          <Plus /> {t("common.new")}
         </Button>
       </div>
 
@@ -80,7 +82,7 @@ function ResourceCrud({ resource }: { resource: Resource }) {
         <TableHeader>
           <TableRow>
             {resource.columns.map((c) => (
-              <TableHead key={c.label}>{c.label}</TableHead>
+              <TableHead key={c.labelKey}>{t(c.labelKey)}</TableHead>
             ))}
             <TableHead className="w-0" />
           </TableRow>
@@ -88,27 +90,29 @@ function ResourceCrud({ resource }: { resource: Resource }) {
         <TableBody>
           {rows === null && (
             <TableRow>
-              <TableCell colSpan={resource.columns.length + 1}>Loading…</TableCell>
+              <TableCell colSpan={resource.columns.length + 1}>{t("common.loading")}</TableCell>
             </TableRow>
           )}
           {rows?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={resource.columns.length + 1}>Nothing here yet.</TableCell>
+              <TableCell colSpan={resource.columns.length + 1}>
+                  {t("common.nothingHere")}
+                </TableCell>
             </TableRow>
           )}
           {rows?.map((row) => (
             <TableRow key={row.id}>
               {resource.columns.map((c, i) => (
-                <TableCell key={c.label}>
+                <TableCell key={c.labelKey}>
                   {i === 0 && resource.detailPath ? (
                     <NextLink
                       href={resource.detailPath(row.id)}
                       className="font-medium underline-offset-4 hover:underline"
                     >
-                      {c.render(row)}
+                      {c.render(row, t)}
                     </NextLink>
                   ) : (
-                    c.render(row)
+                    c.render(row, t)
                   )}
                 </TableCell>
               ))}
@@ -119,26 +123,31 @@ function ResourceCrud({ resource }: { resource: Resource }) {
                     size="sm"
                     render={<NextLink href={resource.detailPath(row.id)} />}
                   >
-                    <ExternalLink /> Manage
+                    <ExternalLink /> {t("common.manage")}
                   </Button>
                 )}
                 {resource.link && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    title={`Edit ${resource.link.label}`}
+                    title={t(resource.link.labelKey)}
                     onClick={() => setLinking(row)}
                   >
                     <Link2 />
                   </Button>
                 )}
-                <Button variant="ghost" size="icon" title="Edit" onClick={() => setEditing(row)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title={t("common.edit")}
+                  onClick={() => setEditing(row)}
+                >
                   <Pencil />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  title="Delete"
+                  title={t("common.delete")}
                   onClick={() => handleDelete(row)}
                 >
                   <Trash2 />
@@ -180,6 +189,7 @@ function RowDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const fields = row ? resource.updateFields : resource.createFields;
   const [values, setValues] = useState<Record<string, string | boolean>>(() =>
     Object.fromEntries(
@@ -197,11 +207,11 @@ function RowDialog({
     try {
       if (row) await api.patch(`${resource.basePath}/${row.id}`, values);
       else await api.post(`${resource.basePath}/`, values);
-      toast.success(row ? "Saved" : "Created");
+      toast.success(t(row ? "common.saved" : "common.created"));
       onSaved();
       onClose();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not save"));
+      toast.error(errorMessage(err, t("err.save")));
     } finally {
       setSaving(false);
     }
@@ -215,7 +225,9 @@ function RowDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {row ? "Edit" : "New"} {resource.label.slice(0, -1).toLowerCase()}
+            {t(row ? "common.editTitle" : "common.newTitle", {
+              item: t(resource.singularKey),
+            })}
           </DialogTitle>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
@@ -228,11 +240,11 @@ function RowDialog({
                     checked={Boolean(values[f.name])}
                     onChange={(e) => set(f, e.target.checked)}
                   />
-                  {f.label}
+                  {t(f.labelKey)}
                 </label>
               ) : (
                 <>
-                  <Label htmlFor={f.name}>{f.label}</Label>
+                  <Label htmlFor={f.name}>{t(f.labelKey)}</Label>
                   {f.type === "textarea" ? (
                     <Textarea
                       id={f.name}
@@ -255,10 +267,10 @@ function RowDialog({
           ))}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "Saving…" : "Save"}
+              {saving ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </form>
@@ -278,6 +290,7 @@ function LinkDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const link = resource.link!;
   const target = getResource(link.options)!;
   const [options, setOptions] = useState<Row[] | null>(null);
@@ -299,7 +312,7 @@ function LinkDialog({
       setLinked((prev) => (on ? [...prev, id] : prev.filter((x) => x !== id)));
       onSaved();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not update"));
+      toast.error(errorMessage(err, t("err.update")));
     }
   }
 
@@ -308,11 +321,13 @@ function LinkDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {link.label} for {String(row.username ?? row.name ?? row.id)}
+            {t(link.labelKey)} · {String(row.username ?? row.name ?? row.id)}
           </DialogTitle>
         </DialogHeader>
         <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
-          {options === null && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {options === null && (
+            <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+          )}
           {options?.map((o) => (
             <label key={o.id} className="flex items-center gap-2 text-sm">
               <input
@@ -325,7 +340,7 @@ function LinkDialog({
           ))}
         </div>
         <DialogFooter>
-          <Button onClick={onClose}>Done</Button>
+          <Button onClick={onClose}>{t("common.done")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

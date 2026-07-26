@@ -1,20 +1,22 @@
 import { BookOpen, KeyRound, Shield, Users, type LucideIcon } from "lucide-react";
 
+import type { Key } from "@/lib/i18n";
+
 export type Field = {
   name: string;
-  label: string;
+  labelKey: Key;
   type?: "text" | "email" | "password" | "textarea" | "checkbox";
   required?: boolean;
 };
 
 export type Column = {
-  label: string;
-  render: (row: Row) => string;
+  labelKey: Key;
+  render: (row: Row, t: (key: Key) => string) => string;
 };
 
 /** Many-to-many edited through `POST/DELETE {basePath}/{id}/{path}/{targetId}`. */
 export type Link = {
-  label: string;
+  labelKey: Key;
   path: string;
   /** resource key whose rows are the available options */
   options: string;
@@ -26,7 +28,9 @@ export type Row = Record<string, unknown> & { id: number };
 
 export type Resource = {
   key: string;
-  label: string;
+  labelKey: Key;
+  /** singular, for "New course" / "Delete this course?" */
+  singularKey: Key;
   icon: LucideIcon;
   basePath: string;
   columns: Column[];
@@ -43,73 +47,80 @@ const names = (v: unknown, key = "name") =>
 export const resources: Resource[] = [
   {
     key: "users",
-    label: "Users",
+    labelKey: "res.users",
+    singularKey: "res.user",
     icon: Users,
     basePath: "/iam/users",
     columns: [
-      { label: "Username", render: (r) => String(r.username) },
-      { label: "Name", render: (r) => `${r.first_name} ${r.last_name}`.trim() || "—" },
-      { label: "Email", render: (r) => String(r.email || "—") },
-      { label: "Roles", render: (r) => names(r.roles) },
-      { label: "Active", render: (r) => (r.is_active ? "yes" : "no") },
+      { labelKey: "field.username", render: (r) => String(r.username) },
+      {
+        labelKey: "field.name",
+        render: (r) => `${r.first_name} ${r.last_name}`.trim() || "—",
+      },
+      { labelKey: "field.email", render: (r) => String(r.email || "—") },
+      { labelKey: "field.roles", render: (r) => names(r.roles) },
+      { labelKey: "field.active", render: (r, t) => t(r.is_active ? "common.yes" : "common.no") },
     ],
     createFields: [
-      { name: "username", label: "Username", required: true },
-      { name: "password", label: "Password", type: "password", required: true },
-      { name: "email", label: "Email", type: "email" },
-      { name: "first_name", label: "First name" },
-      { name: "last_name", label: "Last name" },
+      { name: "username", labelKey: "field.username", required: true },
+      { name: "password", labelKey: "field.password", type: "password", required: true },
+      { name: "email", labelKey: "field.email", type: "email" },
+      { name: "first_name", labelKey: "field.firstName" },
+      { name: "last_name", labelKey: "field.lastName" },
     ],
     updateFields: [
-      { name: "email", label: "Email", type: "email" },
-      { name: "first_name", label: "First name" },
-      { name: "last_name", label: "Last name" },
-      { name: "is_active", label: "Active", type: "checkbox" },
+      { name: "email", labelKey: "field.email", type: "email" },
+      { name: "first_name", labelKey: "field.firstName" },
+      { name: "last_name", labelKey: "field.lastName" },
+      { name: "is_active", labelKey: "field.active", type: "checkbox" },
     ],
-    link: { label: "Roles", path: "roles", options: "roles", field: "roles" },
+    link: { labelKey: "field.roles", path: "roles", options: "roles", field: "roles" },
   },
   {
     key: "roles",
-    label: "Roles",
+    labelKey: "res.roles",
+    singularKey: "res.role",
     icon: Shield,
     basePath: "/iam/roles",
     columns: [
-      { label: "Name", render: (r) => String(r.name) },
-      { label: "Actions", render: (r) => names(r.actions) },
+      { labelKey: "field.name", render: (r) => String(r.name) },
+      { labelKey: "field.actions", render: (r) => names(r.actions) },
     ],
-    createFields: [{ name: "name", label: "Name", required: true }],
-    updateFields: [{ name: "name", label: "Name", required: true }],
-    link: { label: "Actions", path: "actions", options: "actions", field: "actions" },
+    createFields: [{ name: "name", labelKey: "field.name", required: true }],
+    updateFields: [{ name: "name", labelKey: "field.name", required: true }],
+    link: { labelKey: "field.actions", path: "actions", options: "actions", field: "actions" },
   },
   {
     key: "actions",
-    label: "Actions",
+    labelKey: "res.actions",
+    singularKey: "res.action",
     icon: KeyRound,
     basePath: "/iam/actions",
-    columns: [{ label: "Name", render: (r) => String(r.name) }],
-    createFields: [{ name: "name", label: "Name", required: true }],
-    updateFields: [{ name: "name", label: "Name", required: true }],
+    columns: [{ labelKey: "field.name", render: (r) => String(r.name) }],
+    createFields: [{ name: "name", labelKey: "field.name", required: true }],
+    updateFields: [{ name: "name", labelKey: "field.name", required: true }],
   },
   {
     key: "courses",
-    label: "Courses",
+    labelKey: "res.courses",
+    singularKey: "res.course",
     icon: BookOpen,
     basePath: "/courses",
     columns: [
-      { label: "Code", render: (r) => String(r.code) },
-      { label: "Name", render: (r) => String(r.name) },
-      { label: "Description", render: (r) => String(r.description || "—") },
-      { label: "Staff", render: (r) => names(r.professors, "username") },
+      { labelKey: "field.code", render: (r) => String(r.code) },
+      { labelKey: "field.name", render: (r) => String(r.name) },
+      { labelKey: "field.description", render: (r) => String(r.description || "—") },
+      { labelKey: "field.staff", render: (r) => names(r.professors, "username") },
     ],
     createFields: [
-      { name: "code", label: "Code", required: true },
-      { name: "name", label: "Name", required: true },
-      { name: "description", label: "Description", type: "textarea" },
+      { name: "code", labelKey: "field.code", required: true },
+      { name: "name", labelKey: "field.name", required: true },
+      { name: "description", labelKey: "field.description", type: "textarea" },
     ],
     updateFields: [
-      { name: "code", label: "Code", required: true },
-      { name: "name", label: "Name", required: true },
-      { name: "description", label: "Description", type: "textarea" },
+      { name: "code", labelKey: "field.code", required: true },
+      { name: "name", labelKey: "field.name", required: true },
+      { name: "description", labelKey: "field.description", type: "textarea" },
     ],
     detailPath: (id) => `/admin/courses/${id}`,
   },

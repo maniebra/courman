@@ -1,0 +1,240 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+
+export const LOCALES = { en: "English", fa: "فارسی" } as const;
+export type Locale = keyof typeof LOCALES;
+
+const en = {
+  "nav.dashboard": "Dashboard",
+  "nav.manage": "Manage",
+  "nav.admin": "Admin",
+
+  "res.users": "Users",
+  "res.user": "user",
+  "res.roles": "Roles",
+  "res.role": "role",
+  "res.actions": "Actions",
+  "res.action": "action",
+  "res.courses": "Courses",
+  "res.course": "course",
+
+  "field.username": "Username",
+  "field.password": "Password",
+  "field.name": "Name",
+  "field.firstName": "First name",
+  "field.lastName": "Last name",
+  "field.email": "Email",
+  "field.active": "Active",
+  "field.roles": "Roles",
+  "field.actions": "Actions",
+  "field.code": "Code",
+  "field.description": "Description",
+  "field.staff": "Staff",
+  "field.weight": "Weight",
+
+  "common.new": "New",
+  "common.edit": "Edit",
+  "common.delete": "Delete",
+  "common.manage": "Manage",
+  "common.save": "Save",
+  "common.saving": "Saving…",
+  "common.cancel": "Cancel",
+  "common.done": "Done",
+  "common.add": "Add",
+  "common.loading": "Loading…",
+  "common.none": "None.",
+  "common.nothingHere": "Nothing here yet.",
+  "common.yes": "yes",
+  "common.no": "no",
+  "common.empty": "—",
+  "common.deleteConfirm": "Delete this {item}?",
+  "common.deleted": "Deleted",
+  "common.created": "Created",
+  "common.saved": "Saved",
+  "common.editTitle": "Edit {item}",
+  "common.newTitle": "New {item}",
+  "common.language": "Language",
+  "common.theme": "Toggle theme",
+  "common.logout": "Log out",
+  "common.signedInAs": "Signed in as {name}",
+
+  "err.load": "Could not load {item}",
+  "err.save": "Could not save",
+  "err.delete": "Could not delete",
+  "err.update": "Could not update",
+
+  "login.title": "Sign in to Courman",
+  "login.desc": "Use your account credentials to continue.",
+  "login.submit": "Sign in",
+  "login.submitting": "Signing in…",
+  "login.invalid": "Invalid username or password",
+
+  "course.professors": "Professors",
+  "course.headTas": "Head TAs",
+  "course.tas": "TAs",
+  "course.assigned": "{count} assigned",
+  "course.addUser": "Add user…",
+  "course.staffError": "Could not update staff",
+  "course.notFound": "Could not load course",
+
+  "grading.title": "Grading components",
+  "grading.total": "Weights total {total}%",
+  "grading.notHundred": " — does not add up to 100%",
+  "grading.noComponents": "No components yet.",
+  "grading.componentName": "Component name",
+  "grading.weight": "Weight %",
+  "grading.deleteConfirm": "Delete this component and its tasks?",
+  "grading.addError": "Could not add component",
+  "grading.deleteError": "Could not delete component",
+  "grading.loadError": "Could not load grading components",
+  "grading.graders": "Graders",
+  "grading.assign": "Assign",
+  "grading.assignPlaceholder": "Assign grader…",
+  "grading.assignError": "Could not assign grader",
+  "grading.removeError": "Could not remove grader",
+  "grading.tasksError": "Could not load grading tasks",
+};
+
+export type Key = keyof typeof en;
+
+const fa: Record<Key, string> = {
+  "nav.dashboard": "داشبورد",
+  "nav.manage": "مدیریت",
+  "nav.admin": "مدیریت",
+
+  "res.users": "کاربران",
+  "res.user": "کاربر",
+  "res.roles": "نقش‌ها",
+  "res.role": "نقش",
+  "res.actions": "دسترسی‌ها",
+  "res.action": "دسترسی",
+  "res.courses": "درس‌ها",
+  "res.course": "درس",
+
+  "field.username": "نام کاربری",
+  "field.password": "گذرواژه",
+  "field.name": "نام",
+  "field.firstName": "نام",
+  "field.lastName": "نام خانوادگی",
+  "field.email": "ایمیل",
+  "field.active": "فعال",
+  "field.roles": "نقش‌ها",
+  "field.actions": "دسترسی‌ها",
+  "field.code": "کد",
+  "field.description": "توضیحات",
+  "field.staff": "کادر درس",
+  "field.weight": "وزن",
+
+  "common.new": "جدید",
+  "common.edit": "ویرایش",
+  "common.delete": "حذف",
+  "common.manage": "مدیریت",
+  "common.save": "ذخیره",
+  "common.saving": "در حال ذخیره…",
+  "common.cancel": "انصراف",
+  "common.done": "تمام",
+  "common.add": "افزودن",
+  "common.loading": "در حال بارگذاری…",
+  "common.none": "هیچ‌کدام.",
+  "common.nothingHere": "هنوز چیزی ثبت نشده است.",
+  "common.yes": "بله",
+  "common.no": "خیر",
+  "common.empty": "—",
+  "common.deleteConfirm": "این {item} حذف شود؟",
+  "common.deleted": "حذف شد",
+  "common.created": "ایجاد شد",
+  "common.saved": "ذخیره شد",
+  "common.editTitle": "ویرایش {item}",
+  "common.newTitle": "{item} جدید",
+  "common.language": "زبان",
+  "common.theme": "تغییر پوسته",
+  "common.logout": "خروج",
+  "common.signedInAs": "وارد شده به عنوان {name}",
+
+  "err.load": "بارگذاری {item} ممکن نشد",
+  "err.save": "ذخیره ممکن نشد",
+  "err.delete": "حذف ممکن نشد",
+  "err.update": "به‌روزرسانی ممکن نشد",
+
+  "login.title": "ورود به کورمن",
+  "login.desc": "برای ادامه با حساب کاربری خود وارد شوید.",
+  "login.submit": "ورود",
+  "login.submitting": "در حال ورود…",
+  "login.invalid": "نام کاربری یا گذرواژه نادرست است",
+
+  "course.professors": "استادان",
+  "course.headTas": "سرحل‌تمرین‌ها",
+  "course.tas": "حل‌تمرین‌ها",
+  "course.assigned": "{count} نفر",
+  "course.addUser": "افزودن کاربر…",
+  "course.staffError": "به‌روزرسانی کادر درس ممکن نشد",
+  "course.notFound": "بارگذاری درس ممکن نشد",
+
+  "grading.title": "بخش‌های نمره",
+  "grading.total": "مجموع وزن‌ها {total}٪",
+  "grading.notHundred": " — مجموع ۱۰۰٪ نیست",
+  "grading.noComponents": "هنوز بخشی ثبت نشده است.",
+  "grading.componentName": "نام بخش",
+  "grading.weight": "وزن ٪",
+  "grading.deleteConfirm": "این بخش و وظایف آن حذف شود؟",
+  "grading.addError": "افزودن بخش ممکن نشد",
+  "grading.deleteError": "حذف بخش ممکن نشد",
+  "grading.loadError": "بارگذاری بخش‌های نمره ممکن نشد",
+  "grading.graders": "مصححان",
+  "grading.assign": "تخصیص",
+  "grading.assignPlaceholder": "تخصیص مصحح…",
+  "grading.assignError": "تخصیص مصحح ممکن نشد",
+  "grading.removeError": "حذف مصحح ممکن نشد",
+  "grading.tasksError": "بارگذاری وظایف تصحیح ممکن نشد",
+};
+
+const dicts = { en, fa };
+
+export type T = (key: Key, vars?: Record<string, string | number>) => string;
+
+const I18nContext = createContext<{ locale: Locale; setLocale: (l: Locale) => void; t: T }>({
+  locale: "en",
+  setLocale: () => {},
+  t: (key) => en[key],
+});
+
+const STORAGE_KEY = "courman.locale";
+export const dirOf = (locale: Locale) => (locale === "fa" ? "rtl" : "ltr");
+
+export function I18nProvider({ children }: { children: React.ReactNode }) {
+  const [locale, setLocaleState] = useState<Locale>("en");
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    // localStorage is only readable after hydration, so reading it in an effect is
+    // what keeps the SSR markup stable.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (saved === "fa" || saved === "en") setLocaleState(saved);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    document.documentElement.dir = dirOf(locale);
+  }, [locale]);
+
+  const setLocale = useCallback((l: Locale) => {
+    localStorage.setItem(STORAGE_KEY, l);
+    setLocaleState(l);
+  }, []);
+
+  const t = useCallback<T>(
+    (key, vars) =>
+      Object.entries(vars ?? {}).reduce<string>(
+        (out, [k, v]) => out.replaceAll(`{${k}}`, String(v)),
+        dicts[locale][key] ?? en[key],
+      ),
+    [locale],
+  );
+
+  return (
+    <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>
+  );
+}
+
+export const useI18n = () => useContext(I18nContext);

@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "next-themes";
 
 import { Toaster } from "@/components/ui/sonner";
+import { I18nProvider } from "@/lib/i18n";
 
 const inter = localFont({
   src: "./fonts/Inter.ttf",
@@ -37,13 +38,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      dir="ltr"
       suppressHydrationWarning
       className={`${inter.variable} ${lexend.variable} ${vazirmatn.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
-          <Toaster />
+          <I18nProvider>
+            {children}
+            <Toaster />
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>

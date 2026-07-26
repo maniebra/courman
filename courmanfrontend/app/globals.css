@@ -132,4 +132,11 @@
   h3 {
     @apply font-heading;
   }
+  /* Persian: lead with Vazirmatn so digits and punctuation stay in one family. */
+  html[dir="rtl"],
+  html[dir="rtl"] h1,
+  html[dir="rtl"] h2,
+  html[dir="rtl"] h3 {
+    font-family: var(--font-vazirmatn), var(--font-inter), ui-sans-serif, sans-serif;
+  }
 }

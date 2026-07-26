@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { api, errorMessage, listAll, type User } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { useI18n, type Key } from "@/lib/i18n";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -41,13 +42,14 @@ type Task = { id: number; assigned_to: Brief; assigned_by: Brief };
 
 /** Course staff m2m: `POST/DELETE /courses/{id}/{path}/{userId}`. */
 const STAFF = [
-  { field: "professors", path: "professors", label: "Professors" },
-  { field: "head_tas", path: "head-tas", label: "Head TAs" },
-  { field: "tas", path: "tas", label: "TAs" },
-] as const;
+  { field: "professors", path: "professors", labelKey: "course.professors" },
+  { field: "head_tas", path: "head-tas", labelKey: "course.headTas" },
+  { field: "tas", path: "tas", labelKey: "course.tas" },
+] as const satisfies readonly { field: string; path: string; labelKey: Key }[];
 
 export default function CoursePage() {
   const { id } = useParams<{ id: string }>();
+  const { t } = useI18n();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -57,9 +59,9 @@ export default function CoursePage() {
       const res = await api.get<CourseDetail>(`/courses/${id}`);
       setCourse(res.data);
     } catch (err) {
-      setError(errorMessage(err, "Could not load course"));
+      setError(errorMessage(err, t("course.notFound")));
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- setState happens after await
@@ -70,13 +72,13 @@ export default function CoursePage() {
   }, [load]);
 
   if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (!course) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (!course) return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
 
   return (
     <>
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" render={<Link href="/admin/courses" />}>
-          <ArrowLeft />
+          <ArrowLeft className="rtl:rotate-180" />
         </Button>
         <div>
           <h1 className="text-xl font-semibold">
@@ -94,7 +96,7 @@ export default function CoursePage() {
             key={s.field}
             courseId={course.id}
             path={s.path}
-            label={s.label}
+            label={t(s.labelKey)}
             members={course[s.field]}
             users={users}
             onChanged={load}
@@ -127,6 +129,7 @@ function StaffCard({
   users: User[];
   onChanged: () => void;
 }) {
+  const { t } = useI18n();
   const [picked, setPicked] = useState("");
   const available = users.filter((u) => !members.some((m) => m.id === u.id));
 
@@ -135,7 +138,7 @@ function StaffCard({
       await api[method](`/courses/${courseId}/${path}/${userId}`);
       onChanged();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not update staff"));
+      toast.error(errorMessage(err, t("course.staffError")));
     }
   }
 
@@ -143,12 +146,12 @@ function StaffCard({
     <Card>
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
-        <CardDescription>{members.length} assigned</CardDescription>
+        <CardDescription>{t("course.assigned", { count: members.length })}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-1">
           {members.length === 0 && (
-            <span className="text-sm text-muted-foreground">None yet.</span>
+            <span className="text-sm text-muted-foreground">{t("common.none")}</span>
           )}
           {members.map((m) => (
             <Badge key={m.id} variant="secondary" className="gap-1">
@@ -178,7 +181,7 @@ function StaffCard({
             value={picked}
             onChange={(e) => setPicked(e.target.value)}
           >
-            <option value="">Add user…</option>
+            <option value="">{t("course.addUser")}</option>
             {available.map((u) => (
               <option key={u.id} value={u.id}>
                 {label(u)}
@@ -195,6 +198,7 @@ function StaffCard({
 }
 
 function Grading({ courseId, users }: { courseId: number; users: User[] }) {
+  const { t } = useI18n();
   const [components, setComponents] = useState<Component[] | null>(null);
   const [name, setName] = useState("");
   const [weight, setWeight] = useState("");
@@ -205,10 +209,10 @@ function Grading({ courseId, users }: { courseId: number; users: User[] }) {
       const res = await api.get<Component[]>(`/grading/courses/${courseId}/components`);
       setComponents(res.data);
     } catch (err) {
-      toast.error(errorMessage(err, "Could not load grading components"));
+      toast.error(errorMessage(err, t("grading.loadError")));
       setComponents([]);
     }
-  }, [courseId]);
+  }, [courseId, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- setState happens after await
@@ -226,17 +230,17 @@ function Grading({ courseId, users }: { courseId: number; users: User[] }) {
       setWeight("");
       load();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not add component"));
+      toast.error(errorMessage(err, t("grading.addError")));
     }
   }
 
   async function remove(componentId: number) {
-    if (!confirm("Delete this component and its tasks?")) return;
+    if (!confirm(t("grading.deleteConfirm"))) return;
     try {
       await api.delete(`/grading/components/${componentId}`);
       load();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not delete component"));
+      toast.error(errorMessage(err, t("grading.deleteError")));
     }
   }
 
@@ -245,30 +249,30 @@ function Grading({ courseId, users }: { courseId: number; users: User[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Grading components</CardTitle>
+        <CardTitle className="text-base">{t("grading.title")}</CardTitle>
         <CardDescription>
-          Weights total {total}%
-          {total !== 100 && components?.length ? " — does not add up to 100%" : ""}
+          {t("grading.total", { total })}
+          {total !== 100 && components?.length ? t("grading.notHundred") : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Weight</TableHead>
+              <TableHead>{t("field.name")}</TableHead>
+              <TableHead>{t("field.weight")}</TableHead>
               <TableHead className="w-0" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {components === null && (
               <TableRow>
-                <TableCell colSpan={3}>Loading…</TableCell>
+                <TableCell colSpan={3}>{t("common.loading")}</TableCell>
               </TableRow>
             )}
             {components?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={3}>No components yet.</TableCell>
+                <TableCell colSpan={3}>{t("grading.noComponents")}</TableCell>
               </TableRow>
             )}
             {components?.map((c) => (
@@ -285,9 +289,17 @@ function Grading({ courseId, users }: { courseId: number; users: User[] }) {
                     <Tasks componentId={c.id} courseId={courseId} users={users} />
                   )}
                 </TableCell>
-                <TableCell>{c.weight}%</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="icon" title="Delete" onClick={() => remove(c.id)}>
+                  {/* keep "12.50%" from being reordered in RTL */}
+                  <bdi>{c.weight}%</bdi>
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title={t("common.delete")}
+                    onClick={() => remove(c.id)}
+                  >
                     <Trash2 />
                   </Button>
                 </TableCell>
@@ -298,7 +310,7 @@ function Grading({ courseId, users }: { courseId: number; users: User[] }) {
 
         <form className="flex gap-2" onSubmit={add}>
           <Input
-            placeholder="Component name"
+            placeholder={t("grading.componentName")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -308,14 +320,14 @@ function Grading({ courseId, users }: { courseId: number; users: User[] }) {
             step="0.01"
             min="0"
             max="100"
-            placeholder="Weight %"
+            placeholder={t("grading.weight")}
             className="w-32"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
             required
           />
           <Button type="submit">
-            <Plus /> Add
+            <Plus /> {t("common.add")}
           </Button>
         </form>
       </CardContent>
@@ -331,6 +343,7 @@ function Tasks({
   courseId: number;
   users: User[];
 }) {
+  const { t } = useI18n();
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [picked, setPicked] = useState("");
 
@@ -339,10 +352,10 @@ function Tasks({
       const res = await api.get<Task[]>(`/grading/components/${componentId}/tasks`);
       setTasks(res.data);
     } catch (err) {
-      toast.error(errorMessage(err, "Could not load grading tasks"));
+      toast.error(errorMessage(err, t("grading.tasksError")));
       setTasks([]);
     }
-  }, [componentId]);
+  }, [componentId, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- setState happens after await
@@ -358,7 +371,7 @@ function Tasks({
       setPicked("");
       load();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not assign grader"));
+      toast.error(errorMessage(err, t("grading.assignError")));
     }
   }
 
@@ -367,15 +380,15 @@ function Tasks({
       await api.delete(`/grading/tasks/${taskId}`);
       load();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not remove grader"));
+      toast.error(errorMessage(err, t("grading.removeError")));
     }
   }
 
   return (
-    <div className="mt-2 flex flex-col gap-2 border-l pl-3">
-      <p className="text-xs font-medium text-muted-foreground">Graders</p>
-      {tasks === null && <span className="text-sm text-muted-foreground">Loading…</span>}
-      {tasks?.length === 0 && <span className="text-sm text-muted-foreground">None.</span>}
+    <div className="mt-2 flex flex-col gap-2 border-s ps-3">
+      <p className="text-xs font-medium text-muted-foreground">{t("grading.graders")}</p>
+      {tasks === null && <span className="text-sm text-muted-foreground">{t("common.loading")}</span>}
+      {tasks?.length === 0 && <span className="text-sm text-muted-foreground">{t("common.none")}</span>}
       <div className="flex flex-wrap gap-1">
         {tasks?.map((t) => (
           <Badge key={t.id} variant="secondary" className="gap-1">
@@ -392,12 +405,12 @@ function Tasks({
       </div>
       <form className="flex gap-2" onSubmit={assign}>
         <select
-          aria-label="Assign grader"
+          aria-label={t("grading.assignPlaceholder")}
           className="h-8 rounded-md border bg-transparent px-2 text-sm"
           value={picked}
           onChange={(e) => setPicked(e.target.value)}
         >
-          <option value="">Assign grader…</option>
+          <option value="">{t("grading.assignPlaceholder")}</option>
           {users.map((u) => (
             <option key={u.id} value={u.id}>
               {label(u)}
@@ -405,7 +418,7 @@ function Tasks({
           ))}
         </select>
         <Button type="submit" size="sm" disabled={!picked}>
-          Assign
+          {t("grading.assign")}
         </Button>
       </form>
     </div>

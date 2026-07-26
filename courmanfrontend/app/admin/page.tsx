@@ -5,10 +5,12 @@ import Link from "next/link";
 
 import { listAll } from "@/lib/api";
 import { resources } from "@/lib/resources";
+import { useI18n } from "@/lib/i18n";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AdminDashboard() {
+  const { t } = useI18n();
   const [counts, setCounts] = useState<Record<string, number> | null>(null);
 
   useEffect(() => {
@@ -27,7 +29,7 @@ export default function AdminDashboard() {
         <Link key={r.key} href={`/admin/${r.key}`}>
           <Card className="transition-colors hover:border-foreground/20">
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-sm font-medium">{r.label}</CardTitle>
+              <CardTitle className="text-sm font-medium">{t(r.labelKey)}</CardTitle>
               <r.icon className="size-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
