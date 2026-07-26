@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { api, errorMessage, type User } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -52,7 +53,10 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center p-8">
+    <div className="relative flex flex-1 items-center justify-center p-8">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Sign in to Courman</CardTitle>

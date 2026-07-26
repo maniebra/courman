@@ -8,6 +8,7 @@ import { LayoutDashboard, LogOut } from "lucide-react";
 import { api, type User } from "@/lib/api";
 import { resources } from "@/lib/resources";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Sidebar,
   SidebarContent,
@@ -57,7 +58,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <SidebarProvider>
       <Sidebar>
-        <SidebarHeader className="px-4 py-3 text-lg font-semibold">Courman</SidebarHeader>
+        <SidebarHeader className="px-4 py-3 font-heading text-lg font-semibold">
+          Courman
+        </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel>Manage</SidebarGroupLabel>
@@ -66,7 +69,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {nav.map((item) => (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
-                      isActive={pathname === item.href}
+                      isActive={
+                        item.href === "/admin"
+                          ? pathname === item.href
+                          : pathname.startsWith(item.href)
+                      }
                       render={<Link href={item.href} />}
                     >
                       <item.icon />
@@ -91,6 +98,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <span className="text-sm font-medium">
             {nav.find((n) => n.href === pathname)?.label ?? "Admin"}
           </span>
+          <div className="ml-auto">
+            <ThemeToggle />
+          </div>
         </header>
         <div className="flex flex-1 flex-col gap-6 p-6">{children}</div>
       </SidebarInset>

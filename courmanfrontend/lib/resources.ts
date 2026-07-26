@@ -33,6 +33,8 @@ export type Resource = {
   createFields: Field[];
   updateFields: Field[];
   link?: Link;
+  /** rows link to a dedicated page when set */
+  detailPath?: (id: number) => string;
 };
 
 const names = (v: unknown, key = "name") =>
@@ -109,6 +111,7 @@ export const resources: Resource[] = [
       { name: "name", label: "Name", required: true },
       { name: "description", label: "Description", type: "textarea" },
     ],
+    detailPath: (id) => `/admin/courses/${id}`,
   },
 ];
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import NextLink from "next/link";
 import { notFound, useParams } from "next/navigation";
-import { Pencil, Plus, Trash2, Link2 } from "lucide-react";
+import { ExternalLink, Pencil, Plus, Trash2, Link2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, errorMessage, listAll } from "@/lib/api";
@@ -97,10 +98,30 @@ function ResourceCrud({ resource }: { resource: Resource }) {
           )}
           {rows?.map((row) => (
             <TableRow key={row.id}>
-              {resource.columns.map((c) => (
-                <TableCell key={c.label}>{c.render(row)}</TableCell>
+              {resource.columns.map((c, i) => (
+                <TableCell key={c.label}>
+                  {i === 0 && resource.detailPath ? (
+                    <NextLink
+                      href={resource.detailPath(row.id)}
+                      className="font-medium underline-offset-4 hover:underline"
+                    >
+                      {c.render(row)}
+                    </NextLink>
+                  ) : (
+                    c.render(row)
+                  )}
+                </TableCell>
               ))}
               <TableCell className="flex justify-end gap-1">
+                {resource.detailPath && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<NextLink href={resource.detailPath(row.id)} />}
+                  >
+                    <ExternalLink /> Manage
+                  </Button>
+                )}
                 {resource.link && (
                   <Button
                     variant="ghost"
