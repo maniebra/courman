@@ -9,6 +9,28 @@ const en = {
   "nav.dashboard": "Dashboard",
   "nav.manage": "Manage",
   "nav.admin": "Admin",
+  "nav.profile": "Profile",
+  "nav.settings": "Settings",
+
+  "user.staff": "staff",
+
+  "profile.title": "Your profile",
+  "profile.subtitle": "How you show up to the rest of the course staff.",
+  "profile.bio": "Bio",
+  "profile.phone": "Phone number",
+  "profile.avatar": "Avatar",
+  "profile.changeAvatar": "Change photo",
+  "profile.avatarError": "Could not upload the photo",
+  "profile.saveError": "Could not save your profile",
+
+  "settings.title": "Settings",
+  "settings.subtitle": "Preferences stored in this browser.",
+  "settings.appearance": "Appearance",
+  "settings.appearanceHint": "Switch between light and dark.",
+  "settings.light": "Light",
+  "settings.dark": "Dark",
+  "settings.language": "Language",
+  "settings.languageHint": "Persian switches the whole panel to right-to-left.",
 
   "res.users": "Users",
   "res.user": "user",
@@ -33,6 +55,9 @@ const en = {
   "field.description": "Description",
   "field.staff": "Staff",
   "field.weight": "Weight",
+
+  "list.count": "{count} records",
+  "dash.subtitle": "Everything you can manage, at a glance.",
 
   "common.new": "New",
   "common.edit": "Edit",
@@ -135,6 +160,28 @@ const fa: Record<Key, string> = {
   "nav.dashboard": "داشبورد",
   "nav.manage": "مدیریت",
   "nav.admin": "مدیریت",
+  "nav.profile": "نمایه",
+  "nav.settings": "تنظیمات",
+
+  "user.staff": "کارمند",
+
+  "profile.title": "نمایهٔ شما",
+  "profile.subtitle": "چیزی که بقیهٔ کادر درس از شما می‌بینند.",
+  "profile.bio": "درباره",
+  "profile.phone": "شمارهٔ تماس",
+  "profile.avatar": "تصویر",
+  "profile.changeAvatar": "تغییر تصویر",
+  "profile.avatarError": "بارگذاری تصویر ممکن نشد",
+  "profile.saveError": "ذخیرهٔ نمایه ممکن نشد",
+
+  "settings.title": "تنظیمات",
+  "settings.subtitle": "تنظیم‌هایی که در همین مرورگر ذخیره می‌شوند.",
+  "settings.appearance": "ظاهر",
+  "settings.appearanceHint": "میان پوستهٔ روشن و تیره جابه‌جا شوید.",
+  "settings.light": "روشن",
+  "settings.dark": "تیره",
+  "settings.language": "زبان",
+  "settings.languageHint": "با انتخاب فارسی کل پنل راست‌به‌چپ می‌شود.",
 
   "res.users": "کاربران",
   "res.user": "کاربر",
@@ -159,6 +206,9 @@ const fa: Record<Key, string> = {
   "field.description": "توضیحات",
   "field.staff": "کادر درس",
   "field.weight": "وزن",
+
+  "list.count": "{count} مورد",
+  "dash.subtitle": "هرچه می‌توانید مدیریت کنید، در یک نگاه.",
 
   "common.new": "جدید",
   "common.edit": "ویرایش",

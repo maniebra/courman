@@ -1,4 +1,10 @@
-import { BookOpen, KeyRound, Shield, Users, type LucideIcon } from "lucide-react";
+import {
+  BookOpen,
+  KeyRound,
+  Shield,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
 import type { User } from "@/lib/api";
 import type { Key } from "@/lib/i18n";
@@ -13,6 +19,10 @@ export type Field = {
 export type Column = {
   labelKey: Key;
   render: (row: Row, t: (key: Key) => string) => string;
+  /** render as badges instead of a comma-joined string */
+  chips?: (row: Row) => string[];
+  /** render as a status dot */
+  bool?: (row: Row) => boolean;
 };
 
 /** Many-to-many edited through `POST/DELETE {basePath}/{id}/{path}/{targetId}`. */
@@ -47,6 +57,9 @@ export type Resource = {
 
 const isStaff = (user: User) => user.is_staff;
 
+const list = (v: unknown, key = "name") =>
+  Array.isArray(v) ? v.map((o) => String(o[key])) : [];
+
 const names = (v: unknown, key = "name") =>
   Array.isArray(v) ? v.map((o) => String(o[key])).join(", ") || "—" : "—";
 
@@ -67,11 +80,19 @@ export const resources: Resource[] = [
       },
       { labelKey: "field.email", render: (r) => String(r.email || "—") },
       { labelKey: "field.roles", render: (r) => names(r.roles) },
-      { labelKey: "field.active", render: (r, t) => t(r.is_active ? "common.yes" : "common.no") },
+      {
+        labelKey: "field.active",
+        render: (r, t) => t(r.is_active ? "common.yes" : "common.no"),
+      },
     ],
     createFields: [
       { name: "username", labelKey: "field.username", required: true },
-      { name: "password", labelKey: "field.password", type: "password", required: true },
+      {
+        name: "password",
+        labelKey: "field.password",
+        type: "password",
+        required: true,
+      },
       { name: "email", labelKey: "field.email", type: "email" },
       { name: "first_name", labelKey: "field.firstName" },
       { name: "last_name", labelKey: "field.lastName" },
@@ -82,7 +103,12 @@ export const resources: Resource[] = [
       { name: "last_name", labelKey: "field.lastName" },
       { name: "is_active", labelKey: "field.active", type: "checkbox" },
     ],
-    link: { labelKey: "field.roles", path: "roles", options: "roles", field: "roles" },
+    link: {
+      labelKey: "field.roles",
+      path: "roles",
+      options: "roles",
+      field: "roles",
+    },
   },
   {
     key: "roles",
@@ -94,11 +120,20 @@ export const resources: Resource[] = [
     canWrite: isStaff,
     columns: [
       { labelKey: "field.name", render: (r) => String(r.name) },
-      { labelKey: "field.actions", render: (r) => names(r.actions) },
+      {
+        labelKey: "field.actions",
+        render: (r) => names(r.actions),
+        chips: (r) => list(r.actions),
+      },
     ],
     createFields: [{ name: "name", labelKey: "field.name", required: true }],
     updateFields: [{ name: "name", labelKey: "field.name", required: true }],
-    link: { labelKey: "field.actions", path: "actions", options: "actions", field: "actions" },
+    link: {
+      labelKey: "field.actions",
+      path: "actions",
+      options: "actions",
+      field: "actions",
+    },
   },
   {
     key: "actions",
@@ -124,8 +159,14 @@ export const resources: Resource[] = [
       { labelKey: "field.code", render: (r) => String(r.code) },
       { labelKey: "field.name", render: (r) => String(r.name) },
       { labelKey: "field.semester", render: (r) => String(r.semester || "—") },
-      { labelKey: "field.description", render: (r) => String(r.description || "—") },
-      { labelKey: "field.staff", render: (r) => names(r.professors, "username") },
+      {
+        labelKey: "field.description",
+        render: (r) => String(r.description || "—"),
+      },
+      {
+        labelKey: "field.staff",
+        render: (r) => names(r.professors, "username"),
+      },
     ],
     createFields: [
       { name: "code", labelKey: "field.code", required: true },
@@ -143,4 +184,5 @@ export const resources: Resource[] = [
   },
 ];
 
-export const getResource = (key: string) => resources.find((r) => r.key === key);
+export const getResource = (key: string) =>
+  resources.find((r) => r.key === key);

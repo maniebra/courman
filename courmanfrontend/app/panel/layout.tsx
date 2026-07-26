@@ -1,15 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, LogOut } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard } from "lucide-react";
 
-import { api } from "@/lib/api";
 import { resources } from "@/lib/resources";
 import { SessionProvider, useSession } from "@/lib/session";
-import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { LocaleToggle } from "@/components/locale-toggle";
+import { UserMenu } from "@/components/user-menu";
 import { useI18n } from "@/lib/i18n";
 import {
   Sidebar,
@@ -48,7 +45,6 @@ export default function PanelLayout({
 }
 
 function PanelShell({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
   const { t, locale } = useI18n();
   const { user } = useSession();
@@ -64,16 +60,14 @@ function PanelShell({ children }: { children: React.ReactNode }) {
       })),
   ];
 
-  async function handleLogout() {
-    await api.post("/iam/auth/logout");
-    router.replace("/");
-  }
-
   return (
     <SidebarProvider>
       <Sidebar side={locale === "fa" ? "right" : "left"}>
-        <SidebarHeader className="px-4 py-3 font-heading text-lg font-semibold">
-          Courman
+        <SidebarHeader className="flex-row! items-center gap-2 px-4 py-3">
+          <span className="grid size-7 place-items-center rounded-md bg-primary font-heading text-sm font-bold text-primary-foreground">
+            C
+          </span>
+          <span className="font-heading text-lg font-semibold">Courman</span>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
@@ -99,27 +93,24 @@ function PanelShell({ children }: { children: React.ReactNode }) {
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
-        <SidebarFooter className="gap-2 p-3">
-          <p className="text-xs text-muted-foreground">
-            {t("common.signedInAs", { name: user.username })}
-          </p>
-          <Button variant="outline" size="sm" onClick={handleLogout}>
-            <LogOut /> {t("common.logout")}
-          </Button>
+        <SidebarFooter className="border-t p-2">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <UserMenu />
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-14 items-center gap-2 border-b px-4">
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur">
           <SidebarTrigger />
           <span className="text-sm font-medium">
             {nav.find((n) => n.href === pathname)?.label ?? t("nav.admin")}
           </span>
-          <div className="ms-auto flex gap-1">
-            <LocaleToggle />
-            <ThemeToggle />
-          </div>
         </header>
-        <div className="flex flex-1 flex-col gap-6 p-6">{children}</div>
+        <div className="flex flex-1 flex-col gap-6 bg-muted/30 p-6">
+          {children}
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

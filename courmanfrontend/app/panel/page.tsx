@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 import { listAll } from "@/lib/api";
 import { resources } from "@/lib/resources";
@@ -29,28 +30,45 @@ export default function AdminDashboard() {
   }, []);
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {visible.map((r) => (
-        <Link key={r.key} href={`/panel/${r.key}`}>
-          <Card className="transition-colors hover:border-foreground/20">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-sm font-medium">
-                {t(r.labelKey)}
-              </CardTitle>
-              <r.icon className="size-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {counts === null ? (
-                <Skeleton className="h-8 w-12" />
-              ) : (
-                <p className="text-3xl font-semibold">
-                  {counts[r.key] < 0 ? "—" : counts[r.key]}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </Link>
-      ))}
-    </div>
+    <>
+      <div>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+          {t("nav.dashboard")}
+        </h1>
+        <p className="text-sm text-muted-foreground">{t("dash.subtitle")}</p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {visible.map((r) => (
+          <Link key={r.key} href={`/panel/${r.key}`} className="group">
+            <Card className="h-full gap-0 transition-all group-hover:border-primary/40 group-hover:shadow-md group-hover:shadow-primary/5">
+              <CardHeader className="flex! flex-row items-start justify-between">
+                <div className="flex flex-col gap-1">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {t(r.labelKey)}
+                  </CardTitle>
+                  {counts === null ? (
+                    <Skeleton className="h-9 w-14" />
+                  ) : (
+                    <p className="font-heading text-3xl font-semibold tabular-nums">
+                      <bdi>{counts[r.key] < 0 ? "—" : counts[r.key]}</bdi>
+                    </p>
+                  )}
+                </div>
+                <span className="rounded-lg bg-primary/10 p-2 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <r.icon className="size-4" />
+                </span>
+              </CardHeader>
+              <CardContent className="mt-2">
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors group-hover:text-primary">
+                  {t("common.manage")}
+                  <ArrowRight className="size-3 rtl:rotate-180" />
+                </span>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </>
   );
 }

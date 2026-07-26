@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { api, errorMessage, listAll } from "@/lib/api";
 import {
   getResource,
+  type Column,
   type Field,
   type Resource,
   type Row,
@@ -16,6 +17,9 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -83,100 +87,122 @@ function ResourceCrud({ resource }: { resource: Resource }) {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{t(resource.labelKey)}</h1>
-        {canWrite && (
-          <Button onClick={() => setEditing("new")}>
-            <Plus /> {t("common.new")}
-          </Button>
-        )}
-      </div>
+      <Card className="[--card-spacing:0px] overflow-hidden">
+        <div className="flex items-center justify-between gap-4 border-b px-5 py-4">
+          <div>
+            <h1 className="font-heading text-lg font-semibold">
+              {t(resource.labelKey)}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {rows === null
+                ? t("common.loading")
+                : t("list.count", { count: rows.length })}
+            </p>
+          </div>
+          {canWrite && (
+            <Button onClick={() => setEditing("new")}>
+              <Plus /> {t("common.new")}
+            </Button>
+          )}
+        </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {resource.columns.map((c) => (
-              <TableHead key={c.labelKey}>{t(c.labelKey)}</TableHead>
-            ))}
-            <TableHead className="w-0" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows === null && (
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={resource.columns.length + 1}>
-                {t("common.loading")}
-              </TableCell>
+              {resource.columns.map((c) => (
+                <TableHead
+                  key={c.labelKey}
+                  className="h-9 px-5 text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                >
+                  {t(c.labelKey)}
+                </TableHead>
+              ))}
+              <TableHead className="w-0" />
             </TableRow>
-          )}
-          {rows?.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={resource.columns.length + 1}>
-                {t("common.nothingHere")}
-              </TableCell>
-            </TableRow>
-          )}
-          {rows?.map((row) => (
-            <TableRow key={row.id}>
-              {resource.columns.map((c, i) => (
-                <TableCell key={c.labelKey}>
-                  {i === 0 && resource.detailPath ? (
-                    <NextLink
-                      href={resource.detailPath(row.id)}
-                      className="font-medium underline-offset-4 hover:underline"
+          </TableHeader>
+          <TableBody>
+            {rows === null && (
+              <TableRow>
+                <TableCell
+                  colSpan={resource.columns.length + 1}
+                  className="px-5 py-10 text-center text-muted-foreground"
+                >
+                  {t("common.loading")}
+                </TableCell>
+              </TableRow>
+            )}
+            {rows?.length === 0 && (
+              <TableRow>
+                <TableCell
+                  colSpan={resource.columns.length + 1}
+                  className="px-5 py-10 text-center text-muted-foreground"
+                >
+                  {t("common.nothingHere")}
+                </TableCell>
+              </TableRow>
+            )}
+            {rows?.map((row) => (
+              <TableRow key={row.id} className="group/row">
+                {resource.columns.map((c, i) => (
+                  <TableCell key={c.labelKey} className="px-5 py-3">
+                    {i === 0 && resource.detailPath ? (
+                      <NextLink
+                        href={resource.detailPath(row.id)}
+                        className="font-medium text-primary underline-offset-4 hover:underline"
+                      >
+                        {c.render(row, t)}
+                      </NextLink>
+                    ) : (
+                      <Cell column={c} row={row} />
+                    )}
+                  </TableCell>
+                ))}
+                <TableCell className="flex justify-end gap-1 px-5 py-3">
+                  {resource.detailPath && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      render={<NextLink href={resource.detailPath(row.id)} />}
                     >
-                      {c.render(row, t)}
-                    </NextLink>
-                  ) : (
-                    c.render(row, t)
+                      <ExternalLink /> {t("common.manage")}
+                    </Button>
+                  )}
+                  {canWrite && resource.link && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title={t(resource.link.labelKey)}
+                      onClick={() => setLinking(row)}
+                    >
+                      <Link2 />
+                    </Button>
+                  )}
+                  {canWrite && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={t("common.edit")}
+                        onClick={() => setEditing(row)}
+                      >
+                        <Pencil />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={t("common.delete")}
+                        onClick={() => handleDelete(row)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </>
                   )}
                 </TableCell>
-              ))}
-              <TableCell className="flex justify-end gap-1">
-                {resource.detailPath && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    render={<NextLink href={resource.detailPath(row.id)} />}
-                  >
-                    <ExternalLink /> {t("common.manage")}
-                  </Button>
-                )}
-                {canWrite && resource.link && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title={t(resource.link.labelKey)}
-                    onClick={() => setLinking(row)}
-                  >
-                    <Link2 />
-                  </Button>
-                )}
-                {canWrite && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title={t("common.edit")}
-                      onClick={() => setEditing(row)}
-                    >
-                      <Pencil />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title={t("common.delete")}
-                      onClick={() => handleDelete(row)}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
 
       {editing && (
         <RowDialog
@@ -195,6 +221,50 @@ function ResourceCrud({ resource }: { resource: Resource }) {
         />
       )}
     </>
+  );
+}
+
+/** Chips for lists, a status dot for booleans, plain text otherwise. */
+function Cell({ column, row }: { column: Column; row: Row }) {
+  const { t } = useI18n();
+
+  if (column.bool) {
+    const on = column.bool(row);
+    return (
+      <span className="flex items-center gap-2">
+        <span
+          className={cn(
+            "size-1.5 rounded-full",
+            on ? "bg-emerald-500" : "bg-muted-foreground/40",
+          )}
+        />
+        <span className={on ? "" : "text-muted-foreground"}>
+          {t(on ? "common.yes" : "common.no")}
+        </span>
+      </span>
+    );
+  }
+
+  if (column.chips) {
+    const items = column.chips(row);
+    if (items.length === 0)
+      return <span className="text-muted-foreground">—</span>;
+    return (
+      <span className="flex flex-wrap gap-1">
+        {items.map((item) => (
+          <Badge key={item} variant="secondary">
+            {item}
+          </Badge>
+        ))}
+      </span>
+    );
+  }
+
+  const text = column.render(row, t);
+  return text === "—" ? (
+    <span className="text-muted-foreground">—</span>
+  ) : (
+    <>{text}</>
   );
 }
 
