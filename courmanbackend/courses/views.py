@@ -1,7 +1,12 @@
+from uuid import UUID, uuid4
+
+from django.db import transaction
+from django.db.models import Max
 from ninja import Router
 from ninja.errors import HttpError
 from ninja.pagination import paginate
 from ninja.security import SessionAuth
+from ninja.throttling import AnonRateThrottle
 
 from commons.crud import ModelCrudView, aget_or_404
 from courses.models import Course, Group, GroupType, Student
@@ -12,6 +17,8 @@ from courses.schemas import (
     CourseCreateSchema,
     CourseSchema,
     CourseUpdateSchema,
+    GroupSignupFormSchema,
+    GroupSignupSchema,
     GroupTypeCreateSchema,
     GroupTypeSchema,
     GroupTypeUpdateSchema,
@@ -215,6 +222,12 @@ async def update_group_type(request, course_id: int, type_pk: int, payload: Grou
     group_type = await _get_type_or_404(course_id, type_pk)
     await _require_course_manager(group_type.course, request.auth)
     fields = payload.dict(exclude_unset=True)
+    signup_open = fields.pop("signup_open", None)
+    if signup_open is not None:
+        # a fresh token would break links already handed out, so keep the one we have
+        await GroupRepository.set_signup_token(
+            group_type, (group_type.signup_token or uuid4()) if signup_open else None
+        )
     _check_sizes(
         fields.get("min_members", group_type.min_members),
         fields.get("max_members", group_type.max_members),
@@ -276,3 +289,66 @@ async def remove_group_member(request, course_id: int, group_pk: int, student_pk
     student = await _get_student_or_404(course_id, student_pk)
     await GroupRepository.leave(student, group)
     return await GroupRepository.get_type(group.type_id)
+
+
+# --- public sign-up form: no session, guarded by an unguessable token ---
+
+
+def _open_signup_or_404(token: UUID) -> GroupType:
+    try:
+        return GroupType.objects.select_related("course").get(signup_token=token)
+    except GroupType.DoesNotExist:
+        raise HttpError(404, "This sign-up form is closed or does not exist")
+
+
+@api.get("/public/group-signups/{token}", response=GroupSignupFormSchema)
+def group_signup_form(request, token: UUID):
+    group_type = _open_signup_or_404(token)
+    return {
+        "course": str(group_type.course),
+        "title": group_type.title,
+        "description": group_type.description,
+        "min_members": group_type.min_members,
+        "max_members": group_type.max_members,
+    }
+
+
+@api.post(
+    "/public/group-signups/{token}",
+    response={201: MessageSchema},
+    throttle=[AnonRateThrottle("20/h")],
+)
+@transaction.atomic
+def group_signup(request, token: UUID, payload: GroupSignupSchema):
+    """Anyone with the link may form a group, but only out of real student IDs.
+
+    The type row is locked for the duration: the group number is `max + 1`, and
+    two submissions arriving together must not both claim it.
+    """
+    group_type = GroupType.objects.select_for_update().select_related("course").filter(signup_token=token).first()
+    if group_type is None:
+        raise HttpError(404, "This sign-up form is closed or does not exist")
+
+    student_ids = list(dict.fromkeys(sid.strip() for sid in payload.student_ids if sid.strip()))
+    if not group_type.min_members <= len(student_ids) <= group_type.max_members:
+        raise HttpError(
+            422,
+            f"A {group_type.title} group needs between {group_type.min_members} "
+            f"and {group_type.max_members} student IDs",
+        )
+
+    students = list(Student.objects.filter(course_id=group_type.course_id, student_id__in=student_ids))
+    unknown = sorted(set(student_ids) - {student.student_id for student in students})
+    if unknown:
+        raise HttpError(422, f"Not enrolled in {group_type.course.code}: {', '.join(unknown)}")
+
+    taken = sorted(
+        student.student_id for student in students if student.groups.filter(type=group_type).exists()
+    )
+    if taken:
+        raise HttpError(409, f"Already in a {group_type.title} group: {', '.join(taken)}")
+
+    number = (group_type.groups.aggregate(highest=Max("number"))["highest"] or 0) + 1
+    group = Group.objects.create(type=group_type, number=number)
+    group.members.set(students)
+    return 201, {"detail": f"Signed up as {group_type.title} {number}"}

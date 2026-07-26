@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, FileSpreadsheet, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  FileSpreadsheet,
+  Link2,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { ACTIONS, api, errorMessage, type User } from "@/lib/api";
@@ -48,6 +55,8 @@ type GroupType = {
   description: string;
   min_members: number;
   max_members: number;
+  /** set when the public sign-up form is open; the link is /groups/<token> */
+  signup_token: string | null;
   groups: Group[];
 };
 type Brief = {
@@ -613,9 +622,40 @@ function Groups({
                       {type.description}
                     </p>
                   )}
+                  {type.signup_token && (
+                    <button
+                      type="button"
+                      className="mt-1 flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
+                      onClick={() => {
+                        const url = `${location.origin}/groups/${type.signup_token}`;
+                        navigator.clipboard.writeText(url);
+                        toast.success(t("signup.copied"));
+                      }}
+                    >
+                      <Link2 className="size-4" /> {t("signup.copyLink")}
+                    </button>
+                  )}
                 </div>
                 {editable && (
                   <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant={type.signup_token ? "secondary" : "outline"}
+                      title={t("signup.hint")}
+                      onClick={() =>
+                        call(() =>
+                          api.patch(
+                            `/courses/${courseId}/group-types/${type.id}`,
+                            { signup_open: !type.signup_token },
+                          ),
+                        )
+                      }
+                    >
+                      <Link2 />
+                      {type.signup_token
+                        ? t("signup.close")
+                        : t("signup.open")}
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"

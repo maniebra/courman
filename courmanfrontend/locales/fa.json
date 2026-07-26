@@ -153,5 +153,18 @@
   "actionsHelp.createAll": "ساختن {count} مورد باقی‌مانده",
   "actionsHelp.footnote": "اختیار در سطح درس (اینکه چه کسی می‌تواند نمره بدهد) از استاد یا سرحل‌تمرین بودن همان درس می‌آید، نه از دسترسی‌ها.",
   "actionsHelp.unknown": "بی‌اثر",
-  "group.manage": "مدیریت گروه‌ها"
+  "group.manage": "مدیریت گروه‌ها",
+  "signup.open": "باز کردن فرم",
+  "signup.close": "بستن فرم",
+  "signup.copyLink": "کپی پیوند عمومی",
+  "signup.copied": "پیوند کپی شد",
+  "signup.hint": "با یک پیوند اشتراکی، دانشجویان خودشان گروهشان را ثبت می‌کنند",
+  "signup.subtitle": "شمارهٔ دانشجویی همهٔ اعضا را وارد کنید.",
+  "signup.members": "شماره‌های دانشجویی ({min} تا {max} عضو)",
+  "signup.memberN": "شمارهٔ دانشجویی {n}",
+  "signup.addMember": "افزودن عضو",
+  "signup.submit": "ثبت گروه",
+  "signup.error": "ثبت گروه ممکن نشد",
+  "signup.closed": "این فرم بسته است یا وجود ندارد.",
+  "signup.doneHint": "می‌توانید این صفحه را ببندید. اگر مشکلی هست با کادر درس در تماس باشید."
 }

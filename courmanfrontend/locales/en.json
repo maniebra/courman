@@ -153,5 +153,18 @@
   "actionsHelp.createAll": "Create the {count} missing",
   "actionsHelp.footnote": "Course-level authority (who may grade a course) comes from being its professor or head TA, not from an action.",
   "actionsHelp.unknown": "not enforced",
-  "group.manage": "Manage groups"
+  "group.manage": "Manage groups",
+  "signup.open": "Open form",
+  "signup.close": "Close form",
+  "signup.copyLink": "Copy public link",
+  "signup.copied": "Link copied",
+  "signup.hint": "Let students sign their own group up with a shareable link",
+  "signup.subtitle": "Enter the student ID of every member.",
+  "signup.members": "Student IDs ({min}–{max} members)",
+  "signup.memberN": "Student ID {n}",
+  "signup.addMember": "Add member",
+  "signup.submit": "Submit group",
+  "signup.error": "Could not submit the group",
+  "signup.closed": "This sign-up form is closed or does not exist.",
+  "signup.doneHint": "You can close this page. Talk to the course staff if something is wrong."
 }

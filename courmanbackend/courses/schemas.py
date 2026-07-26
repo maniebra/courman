@@ -35,7 +35,7 @@ class GroupTypeSchema(ModelSchema):
 
     class Meta:
         model = GroupType
-        fields = ["id", "course", "title", "description", "min_members", "max_members"]
+        fields = ["id", "course", "title", "description", "min_members", "max_members", "signup_token"]
 
 
 class GroupTypeCreateSchema(Schema):
@@ -50,6 +50,22 @@ class GroupTypeUpdateSchema(Schema):
     description: Optional[str] = None
     min_members: Optional[int] = None
     max_members: Optional[int] = None
+    #: True mints a sign-up token (keeping any existing one), False closes the form
+    signup_open: Optional[bool] = None
+
+
+class GroupSignupFormSchema(Schema):
+    """What an anonymous visitor may see: the rules, never the roster."""
+
+    course: str
+    title: str
+    description: str
+    min_members: int
+    max_members: int
+
+
+class GroupSignupSchema(Schema):
+    student_ids: list[str]
 
 
 class CourseSchema(ModelSchema):

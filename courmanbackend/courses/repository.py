@@ -101,6 +101,12 @@ class GroupRepository:
         return await GroupRepository.get_type(group_type.pk)
 
     @staticmethod
+    async def set_signup_token(group_type: GroupType, token) -> None:
+        """Its own setter because `update_type` treats None as "leave alone"."""
+        group_type.signup_token = token
+        await group_type.asave(update_fields=["signup_token", "updated_at"])
+
+    @staticmethod
     async def delete_type(group_type: GroupType) -> None:
         await group_type.adelete()
 

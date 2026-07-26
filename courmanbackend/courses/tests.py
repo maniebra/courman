@@ -231,3 +231,67 @@ class CourseCrudTests(TestCase):
         deleted = await self.async_client.delete(f"/api/courses/{course.id}/group-types/{project}")
         self.assertEqual(deleted.status_code, 200)
         self.assertEqual(await one.groups.acount(), 0)
+
+    async def test_public_group_signup(self):
+        await self._login_admin()
+        course = await Course.objects.acreate(code="CS500", name="Open", semester="Fall 2026")
+        for student_id in ("1", "2", "3"):
+            await Student.objects.acreate(course=course, student_id=student_id)
+
+        type_pk = _json(
+            await self.async_client.post(
+                f"/api/courses/{course.id}/group-types",
+                data={"title": "Project", "min_members": 2, "max_members": 2},
+                content_type="application/json",
+            )
+        )["id"]
+
+        # closed until the staff opens it
+        opened = _json(
+            await self.async_client.patch(
+                f"/api/courses/{course.id}/group-types/{type_pk}",
+                data={"signup_open": True},
+                content_type="application/json",
+            )
+        )
+        token = opened["signup_token"]
+        self.assertIsNotNone(token)
+
+        await self.async_client.post("/api/iam/auth/logout")
+
+        form = await self.async_client.get(f"/api/courses/public/group-signups/{token}")
+        self.assertEqual(_json(form)["title"], "Project")
+        self.assertNotIn("students", _json(form))
+
+        async def submit(*student_ids):
+            return await self.async_client.post(
+                f"/api/courses/public/group-signups/{token}",
+                data={"student_ids": list(student_ids)},
+                content_type="application/json",
+            )
+
+        self.assertEqual((await submit("1")).status_code, 422)  # below the minimum
+        self.assertEqual((await submit("1", "404")).status_code, 422)  # not enrolled
+
+        created = await submit("1", "2")
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(_json(created)["detail"], "Signed up as Project 1")
+
+        self.assertEqual((await submit("2", "3")).status_code, 409)  # 2 is taken
+
+        # a closed form is a 404, link or no link
+        await self._login_admin_again()
+        await self.async_client.patch(
+            f"/api/courses/{course.id}/group-types/{type_pk}",
+            data={"signup_open": False},
+            content_type="application/json",
+        )
+        await self.async_client.post("/api/iam/auth/logout")
+        self.assertEqual((await self.async_client.get(f"/api/courses/public/group-signups/{token}")).status_code, 404)
+
+    async def _login_admin_again(self):
+        await self.async_client.post(
+            "/api/iam/auth/login",
+            data={"username": "admin", "password": "s3cret-pass"},
+            content_type="application/json",
+        )

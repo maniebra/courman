@@ -37,6 +37,8 @@ class GroupType(models.Model):
     description = models.TextField(blank=True, default="")
     min_members = models.PositiveSmallIntegerField(default=1)
     max_members = models.PositiveSmallIntegerField(default=1)
+    #: set to open the public sign-up form at /groups/<token>; cleared to close it
+    signup_token = models.UUIDField(null=True, blank=True, unique=True, default=None)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
