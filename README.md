@@ -191,21 +191,6 @@ cd courmanfrontend
 pnpm build
 ```
 
-## Operational Notes
-
-- The backend uses Django session authentication and CSRF protection.
-- Mutating frontend requests are configured to send the `X-CSRFToken` header
-  from the `csrftoken` cookie.
-- Course records are unique by course code and semester.
-- Students are roster entries tied to a course and are not Django users.
-- Professors and head TAs can manage grading components and grading sheets for
-  their courses.
-- TAs can enter scores only for grading components assigned to them.
-- The Docker backend service mounts the backend source tree for development and
-  stores the virtual environment in a named volume.
-- The Docker frontend service mounts the frontend source tree and keeps
-  `node_modules` and `.next` in named volumes.
-
 ## License
 
 See `LICENSE` for licensing information.
