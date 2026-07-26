@@ -1,14 +1,16 @@
 from ninja import File, Router
 from ninja.files import UploadedFile
 from ninja.pagination import paginate
-from ninja.security import SessionAuth, SessionAuthIsStaff
+from ninja.security import SessionAuth
 
 from commons.crud import aget_or_404
+from iam.actions import Actions
+from iam.permissions import HasAction
 from profiles.repository import ProfileRepository
 from profiles.schemas import ProfileSchema, ProfileUpdateSchema
 
 session_auth = SessionAuth()
-staff_auth = SessionAuthIsStaff()
+view_users = HasAction(Actions.USERS_VIEW)
 
 api = Router(tags=["profiles"])
 
@@ -30,12 +32,12 @@ async def upload_my_avatar(request, avatar: UploadedFile = File(...)):
     return await ProfileRepository.update_profile(profile, avatar=avatar)
 
 
-@api.get("/", response=list[ProfileSchema], auth=staff_auth)
+@api.get("/", response=list[ProfileSchema], auth=view_users)
 @paginate
 async def list_profiles(request):
     return ProfileRepository.list_profiles()
 
 
-@api.get("/{user_id}", response=ProfileSchema, auth=staff_auth)
+@api.get("/{user_id}", response=ProfileSchema, auth=view_users)
 async def get_profile(request, user_id: int):
     return await aget_or_404(ProfileRepository.get_profile(user_id), "Profile not found")

@@ -47,12 +47,12 @@ export default function PanelLayout({
 function PanelShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t, locale } = useI18n();
-  const { user } = useSession();
+  const { can } = useSession();
 
   const nav = [
     { href: "/panel", label: t("nav.dashboard"), icon: LayoutDashboard },
     ...resources
-      .filter((r) => r.visible(user))
+      .filter((r) => r.visible(can))
       .map((r) => ({
         href: `/panel/${r.key}`,
         label: t(r.labelKey),

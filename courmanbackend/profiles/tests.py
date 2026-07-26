@@ -44,13 +44,23 @@ class ProfileSelfServiceTests(TestCase):
 
 
 class ProfileAdminTests(TestCase):
-    async def _login_staff(self):
-        await User.objects.acreate_user(username="admin", password="s3cret-pass", is_staff=True)
+    async def _login_admin(self, *actions):
+        """Sign in as someone whose role holds `actions` (all of them by default)."""
+        from iam.actions import ACTION_CATALOGUE
+        from iam.models import Role, RoleAction
+
+        user = await User.objects.acreate_user(username="admin", password="s3cret-pass")
+        role = await Role.objects.acreate(name="Test role")
+        for name in actions or ACTION_CATALOGUE:
+            action, _ = await RoleAction.objects.aget_or_create(name=name)
+            await role.actions.aadd(action)
+        await user.roles.aadd(role)
         await self.async_client.post(
             "/api/iam/auth/login",
             data={"username": "admin", "password": "s3cret-pass"},
             content_type="application/json",
         )
+        return user
 
     async def test_list_profiles_requires_staff(self):
         response = await self.async_client.get("/api/profiles/")
@@ -60,12 +70,12 @@ class ProfileAdminTests(TestCase):
         user = await User.objects.acreate_user(username="bob", password="s3cret-pass")
         await Profile.objects.acreate(user=user, bio="Bob's bio")
 
-        await self._login_staff()
+        await self._login_admin()
         response = await self.async_client.get(f"/api/profiles/{user.id}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(_json(response)["bio"], "Bob's bio")
 
     async def test_get_missing_profile_404s(self):
-        await self._login_staff()
+        await self._login_admin()
         response = await self.async_client.get("/api/profiles/999999")
         self.assertEqual(response.status_code, 404)

@@ -1,4 +1,6 @@
-from courses.models import Course, Student
+from django.db.models import Max
+
+from courses.models import Course, Group, GroupType, Student
 from iam.models import User
 
 
@@ -53,6 +55,10 @@ class CourseRepository:
         await course.tas.aremove(user)
 
     @staticmethod
+    async def has_action(user: User, action_name: str) -> bool:
+        return await user.roles.filter(actions__name=action_name).aexists()
+
+    @staticmethod
     async def is_instructor(course: Course, user: User) -> bool:
         """Professors and head TAs of this course - and nobody else.
 
@@ -70,6 +76,62 @@ class CourseRepository:
     @staticmethod
     async def is_ta(course: Course, user: User) -> bool:
         return await course.tas.filter(pk=user.pk).aexists()
+
+
+class GroupRepository:
+    @staticmethod
+    def list_types(course_id: int):
+        return GroupType.objects.filter(course_id=course_id).prefetch_related("groups__members")
+
+    @staticmethod
+    async def get_type(type_pk: int) -> GroupType:
+        return await GroupType.objects.select_related("course").prefetch_related("groups__members").aget(pk=type_pk)
+
+    @staticmethod
+    async def create_type(*, course: Course, **fields) -> GroupType:
+        group_type = await GroupType.objects.acreate(course=course, **fields)
+        return await GroupRepository.get_type(group_type.pk)
+
+    @staticmethod
+    async def update_type(group_type: GroupType, **fields) -> GroupType:
+        for field, value in fields.items():
+            if value is not None:
+                setattr(group_type, field, value)
+        await group_type.asave()
+        return await GroupRepository.get_type(group_type.pk)
+
+    @staticmethod
+    async def delete_type(group_type: GroupType) -> None:
+        await group_type.adelete()
+
+    @staticmethod
+    async def get_group(group_pk: int) -> Group:
+        return await Group.objects.select_related("type__course").prefetch_related("members").aget(pk=group_pk)
+
+    @staticmethod
+    async def add_group(group_type: GroupType) -> Group:
+        """Groups of a type are numbered 1, 2, 3...; the next one takes the next free number."""
+        last = await group_type.groups.aaggregate(highest=Max("number"))
+        return await Group.objects.acreate(type=group_type, number=(last["highest"] or 0) + 1)
+
+    @staticmethod
+    async def delete_group(group: Group) -> None:
+        await group.adelete()
+
+    @staticmethod
+    async def member_count(group: Group) -> int:
+        return await group.members.acount()
+
+    @staticmethod
+    async def join(student: Student, group: Group) -> None:
+        """Groups of one type are mutually exclusive, so joining leaves the siblings."""
+        async for sibling in Group.objects.filter(type_id=group.type_id, members=student).exclude(pk=group.pk):
+            await sibling.members.aremove(student)
+        await group.members.aadd(student)
+
+    @staticmethod
+    async def leave(student: Student, group: Group) -> None:
+        await group.members.aremove(student)
 
 
 class StudentRepository:

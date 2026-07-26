@@ -19,6 +19,7 @@ import { useSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { ActionsHelp } from "@/components/actions-help";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,17 +42,17 @@ import {
 
 export default function ResourcePage() {
   const { resource: key } = useParams<{ resource: string }>();
-  const { user } = useSession();
+  const { can } = useSession();
   const resource = getResource(key);
-  if (!resource || !resource.visible(user)) notFound();
+  if (!resource || !resource.visible(can)) notFound();
   // key in the route changes => remount, so per-resource state never leaks
   return <ResourceCrud key={key} resource={resource} />;
 }
 
 function ResourceCrud({ resource }: { resource: Resource }) {
   const { t } = useI18n();
-  const { user } = useSession();
-  const canWrite = resource.canWrite(user);
+  const { can } = useSession();
+  const canWrite = resource.canWrite(can);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [linking, setLinking] = useState<Row | null>(null);
@@ -87,6 +88,10 @@ function ResourceCrud({ resource }: { resource: Resource }) {
 
   return (
     <>
+      {resource.key === "actions" && (
+        <ActionsHelp rows={rows} canWrite={canWrite} onChanged={load} />
+      )}
+
       <Card className="[--card-spacing:0px] overflow-hidden">
         <div className="flex items-center justify-between gap-4 border-b px-5 py-4">
           <div>

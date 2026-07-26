@@ -23,6 +23,13 @@ class RoleActionSchema(ModelSchema):
         fields = ["id", "name", "created_at", "updated_at"]
 
 
+class ActionCatalogueSchema(Schema):
+    """An action the backend actually checks, and what holding it allows."""
+
+    name: str
+    description: str
+
+
 class RoleActionCreateSchema(Schema):
     name: str
 
@@ -49,6 +56,14 @@ class RoleUpdateSchema(Schema):
 
 class UserSchema(ModelSchema):
     roles: list[RoleSchema] = []
+    #: flattened from the user's roles so callers never have to walk them
+    actions: list[str] = []
+
+    @staticmethod
+    def resolve_actions(obj: User) -> list[str]:
+        from iam.permissions import actions_of
+
+        return actions_of(obj)
 
     class Meta:
         model = User
@@ -60,6 +75,7 @@ class UserSchema(ModelSchema):
             "email",
             "is_active",
             "is_staff",
+            "is_superuser",
             "date_joined",
         ]
 

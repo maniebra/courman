@@ -6,7 +6,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import type { User } from "@/lib/api";
+import { ACTIONS } from "@/lib/api";
+import type { Can } from "@/lib/session";
 import type { Key } from "@/lib/i18n";
 
 export type Field = {
@@ -50,12 +51,10 @@ export type Resource = {
   link?: Link;
   /** rows link to a dedicated page when set */
   detailPath?: (id: number) => string;
-  /** mirrors what the API actually enforces, so we never show a dead end */
-  visible: (user: User) => boolean;
-  canWrite: (user: User) => boolean;
+  /** mirrors the actions the API demands, so we never show a dead end */
+  visible: (can: Can) => boolean;
+  canWrite: (can: Can) => boolean;
 };
-
-const isStaff = (user: User) => user.is_staff;
 
 const list = (v: unknown, key = "name") =>
   Array.isArray(v) ? v.map((o) => String(o[key])) : [];
@@ -70,8 +69,8 @@ export const resources: Resource[] = [
     singularKey: "res.user",
     icon: Users,
     basePath: "/iam/users",
-    visible: isStaff,
-    canWrite: isStaff,
+    visible: (can) => can(ACTIONS.usersView),
+    canWrite: (can) => can(ACTIONS.usersManage),
     columns: [
       { labelKey: "field.username", render: (r) => String(r.username) },
       {
@@ -116,8 +115,8 @@ export const resources: Resource[] = [
     singularKey: "res.role",
     icon: Shield,
     basePath: "/iam/roles",
-    visible: isStaff,
-    canWrite: isStaff,
+    visible: (can) => can(ACTIONS.rolesView),
+    canWrite: (can) => can(ACTIONS.rolesManage),
     columns: [
       { labelKey: "field.name", render: (r) => String(r.name) },
       {
@@ -141,8 +140,8 @@ export const resources: Resource[] = [
     singularKey: "res.action",
     icon: KeyRound,
     basePath: "/iam/actions",
-    visible: isStaff,
-    canWrite: isStaff,
+    visible: (can) => can(ACTIONS.rolesView),
+    canWrite: (can) => can(ACTIONS.rolesManage),
     columns: [{ labelKey: "field.name", render: (r) => String(r.name) }],
     createFields: [{ name: "name", labelKey: "field.name", required: true }],
     updateFields: [{ name: "name", labelKey: "field.name", required: true }],
@@ -153,8 +152,8 @@ export const resources: Resource[] = [
     singularKey: "res.course",
     icon: BookOpen,
     basePath: "/courses",
-    visible: () => true,
-    canWrite: isStaff,
+    visible: (can) => can(ACTIONS.coursesView),
+    canWrite: (can) => can(ACTIONS.coursesManage),
     columns: [
       { labelKey: "field.code", render: (r) => String(r.code) },
       { labelKey: "field.name", render: (r) => String(r.name) },

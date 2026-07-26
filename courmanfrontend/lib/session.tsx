@@ -19,9 +19,12 @@ export type Profile = {
   avatar: string | null;
 };
 
+export type Can = (action: string) => boolean;
+
 const SessionContext = createContext<{
   user: User;
   profile: Profile | null;
+  can: Can;
   reloadProfile: () => void;
 } | null>(null);
 
@@ -58,8 +61,12 @@ export function SessionProvider({
 
   if (!user) return <>{fallback}</>;
 
+  // superusers hold everything; everyone else is exactly their roles' actions
+  const can: Can = (action) =>
+    user.is_superuser || user.actions.includes(action);
+
   return (
-    <SessionContext.Provider value={{ user, profile, reloadProfile }}>
+    <SessionContext.Provider value={{ user, profile, can, reloadProfile }}>
       {children}
     </SessionContext.Provider>
   );

@@ -13,8 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AdminDashboard() {
   const { t } = useI18n();
-  const { user } = useSession();
-  const visible = resources.filter((r) => r.visible(user));
+  const { can } = useSession();
+  const visible = resources.filter((r) => r.visible(can));
   const [counts, setCounts] = useState<Record<string, number> | null>(null);
 
   useEffect(() => {

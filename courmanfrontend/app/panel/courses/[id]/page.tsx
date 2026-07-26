@@ -3,18 +3,28 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, FileSpreadsheet, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, FileSpreadsheet, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, errorMessage, type User } from "@/lib/api";
+import { ACTIONS, api, errorMessage, type User } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useI18n, type Key } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -30,6 +40,16 @@ import {
 } from "@/components/ui/table";
 
 type Student = { id: number; student_id: string; name: string };
+/** One numbered team of a type ("Project 1"); a student joins one group per type. */
+type Group = { id: number; number: number; members: Student[] };
+type GroupType = {
+  id: number;
+  title: string;
+  description: string;
+  min_members: number;
+  max_members: number;
+  groups: Group[];
+};
 type Brief = {
   id: number;
   username: string;
@@ -65,15 +85,21 @@ const STAFF = [
 export default function CoursePage() {
   const { id } = useParams<{ id: string }>();
   const { t } = useI18n();
-  const { user } = useSession();
+  const { user, can } = useSession();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [users, setUsers] = useState<Brief[]>([]);
+  const [types, setTypes] = useState<GroupType[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Roster and groups move together: assigning a student changes both.
   const load = useCallback(async () => {
     try {
-      const res = await api.get<CourseDetail>(`/courses/${id}`);
-      setCourse(res.data);
+      const [courseRes, typesRes] = await Promise.all([
+        api.get<CourseDetail>(`/courses/${id}`),
+        api.get<GroupType[]>(`/courses/${id}/group-types`),
+      ]);
+      setCourse(courseRes.data);
+      setTypes(typesRes.data);
     } catch (err) {
       setError(errorMessage(err, t("course.notFound")));
     }
@@ -93,9 +119,9 @@ export default function CoursePage() {
   const canManageGrading =
     course !== null &&
     [...course.professors, ...course.head_tas].some((m) => m.id === user.id);
-  const canEditStaff = user.is_staff;
+  const canEditStaff = can(ACTIONS.courseStaffManage);
   // Enrolment is run by whoever runs the course, staff included.
-  const canEditStudents = user.is_staff || canManageGrading;
+  const canEditStudents = can(ACTIONS.studentsManage) && (canManageGrading || can(ACTIONS.coursesManage));
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!course)
     return (
@@ -145,6 +171,15 @@ export default function CoursePage() {
 
       <Students
         courseId={course.id}
+        students={course.students}
+        types={types}
+        editable={canEditStudents}
+        onChanged={load}
+      />
+
+      <Groups
+        courseId={course.id}
+        types={types}
         students={course.students}
         editable={canEditStudents}
         onChanged={load}
@@ -260,11 +295,13 @@ function StaffCard({
 function Students({
   courseId,
   students,
+  types,
   editable,
   onChanged,
 }: {
   courseId: number;
   students: Student[];
+  types: GroupType[];
   editable: boolean;
   onChanged: () => void;
 }) {
@@ -298,6 +335,11 @@ function Students({
     }
   }
 
+  const groupOf = (type: GroupType, student: Student) =>
+    type.groups.find((g) => g.members.some((m) => m.id === student.id)) ?? null;
+
+  const [assigning, setAssigning] = useState<Student | null>(null);
+
   return (
     <Card>
       <CardHeader>
@@ -312,13 +354,14 @@ function Students({
             <TableRow>
               <TableHead>{t("course.studentId")}</TableHead>
               <TableHead>{t("field.name")}</TableHead>
+              {types.length > 0 && <TableHead>{t("group.title")}</TableHead>}
               <TableHead className="w-0" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {students.length === 0 && (
               <TableRow>
-                <TableCell colSpan={3}>{t("common.nothingHere")}</TableCell>
+                <TableCell colSpan={4}>{t("common.nothingHere")}</TableCell>
               </TableRow>
             )}
             {students.map((student) => (
@@ -327,6 +370,37 @@ function Students({
                   <bdi>{student.student_id}</bdi>
                 </TableCell>
                 <TableCell>{student.name || "—"}</TableCell>
+                {types.length > 0 && (
+                  <TableCell>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {types.map((type) => {
+                        const mine = groupOf(type, student);
+                        return mine ? (
+                          <Badge key={type.id} variant="secondary">
+                            <bdi>
+                              {type.title} {mine.number}
+                            </bdi>
+                          </Badge>
+                        ) : null;
+                      })}
+                      {types.every((type) => !groupOf(type, student)) && (
+                        <span className="text-sm text-muted-foreground">
+                          {t("group.noGroup")}
+                        </span>
+                      )}
+                      {editable && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={t("group.manage")}
+                          onClick={() => setAssigning(student)}
+                        >
+                          <Pencil />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                )}
                 <TableCell>
                   {editable && (
                     <Button
@@ -364,7 +438,410 @@ function Students({
           </form>
         )}
       </CardContent>
+
+      {assigning && (
+        <StudentGroupsDialog
+          courseId={courseId}
+          student={assigning}
+          types={types}
+          onClose={() => setAssigning(null)}
+          onChanged={onChanged}
+        />
+      )}
     </Card>
+  );
+}
+
+/** Every type in one place, so ten of them cost a dialog instead of ten columns. */
+function StudentGroupsDialog({
+  courseId,
+  student,
+  types,
+  onClose,
+  onChanged,
+}: {
+  courseId: number;
+  student: Student;
+  types: GroupType[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const { t } = useI18n();
+
+  /** One control per type does join, move and leave: joining leaves the sibling. */
+  async function assign(from: Group | null, to: number | null) {
+    try {
+      if (to === null)
+        await api.delete(
+          `/courses/${courseId}/groups/${from!.id}/members/${student.id}`,
+        );
+      else
+        await api.post(
+          `/courses/${courseId}/groups/${to}/members/${student.id}`,
+        );
+      onChanged();
+    } catch (err) {
+      toast.error(errorMessage(err, t("group.error")));
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            <bdi>{student.name || student.student_id}</bdi>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          {types.map((type) => {
+            const mine =
+              type.groups.find((g) =>
+                g.members.some((m) => m.id === student.id),
+              ) ?? null;
+            return (
+              <div key={type.id} className="flex items-center justify-between gap-4">
+                <Label htmlFor={`type-${type.id}`}>{type.title}</Label>
+                {type.groups.length === 0 ? (
+                  <span className="text-sm text-muted-foreground">
+                    {t("group.noGroupsYet")}
+                  </span>
+                ) : (
+                  <select
+                    id={`type-${type.id}`}
+                    className="h-9 w-48 rounded-md border bg-transparent px-2 text-sm"
+                    value={mine?.id ?? ""}
+                    onChange={(e) =>
+                      assign(mine, e.target.value ? Number(e.target.value) : null)
+                    }
+                  >
+                    <option value="">{t("group.noGroup")}</option>
+                    {type.groups.map((g) => (
+                      <option
+                        key={g.id}
+                        value={g.id}
+                        // a full group stays selectable if it is already theirs
+                        disabled={
+                          g.id !== mine?.id &&
+                          g.members.length >= type.max_members
+                        }
+                      >
+                        {type.title} {g.number} ({g.members.length}/
+                        {type.max_members})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <DialogFooter>
+          <Button type="button" onClick={onClose}>
+            {t("common.done")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Groups({
+  courseId,
+  types,
+  students,
+  editable,
+  onChanged,
+}: {
+  courseId: number;
+  types: GroupType[];
+  students: Student[];
+  editable: boolean;
+  onChanged: () => void;
+}) {
+  const { t } = useI18n();
+  const [editing, setEditing] = useState<GroupType | "new" | null>(null);
+
+  async function call(fn: () => Promise<unknown>) {
+    try {
+      await fn();
+      onChanged();
+    } catch (err) {
+      toast.error(errorMessage(err, t("group.error")));
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t("group.title")}</CardTitle>
+        <CardDescription>{t("group.hint")}</CardDescription>
+        {editable && (
+          <CardAction>
+            <Button size="sm" onClick={() => setEditing("new")}>
+              <Plus /> {t("group.newType")}
+            </Button>
+          </CardAction>
+        )}
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {types.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            {t("common.nothingHere")}
+          </p>
+        )}
+        {types.map((type) => {
+          const grouped = new Set(
+            type.groups.flatMap((g) => g.members.map((m) => m.id)),
+          );
+          const ungrouped = students.filter((s) => !grouped.has(s.id)).length;
+          return (
+            <div key={type.id} className="flex flex-col gap-3 rounded-md border p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium">{type.title}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t("group.limits", {
+                      min: type.min_members,
+                      max: type.max_members,
+                    })}
+                    {ungrouped > 0 &&
+                      ` · ${t("group.ungroupedCount", { count: ungrouped })}`}
+                  </p>
+                  {type.description && (
+                    <p className="text-sm text-muted-foreground">
+                      {type.description}
+                    </p>
+                  )}
+                </div>
+                {editable && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        call(() =>
+                          api.post(
+                            `/courses/${courseId}/group-types/${type.id}/groups`,
+                          ),
+                        )
+                      }
+                    >
+                      <Plus /> {t("group.addGroup")}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title={t("common.edit")}
+                      onClick={() => setEditing(type)}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title={t("common.delete")}
+                      onClick={() => {
+                        if (
+                          !confirm(
+                            t("common.deleteConfirm", { item: type.title }),
+                          )
+                        )
+                          return;
+                        call(() =>
+                          api.delete(
+                            `/courses/${courseId}/group-types/${type.id}`,
+                          ),
+                        );
+                      }}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {type.groups.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t("group.noGroupsYet")}
+                </p>
+              ) : (
+                <div className="grid gap-2 lg:grid-cols-2">
+                  {type.groups.map((group) => (
+                    <div
+                      key={group.id}
+                      className="flex items-start gap-2 rounded-md bg-muted/40 p-2"
+                    >
+                      <span className="font-medium tabular-nums">
+                        <bdi>
+                          {type.title} {group.number}
+                        </bdi>
+                      </span>
+                      <div className="flex flex-1 flex-wrap gap-1">
+                        {group.members.length === 0 && (
+                          <span className="text-sm text-muted-foreground">
+                            {t("common.none")}
+                          </span>
+                        )}
+                        {group.members.map((m) => (
+                          <Badge key={m.id} variant="secondary">
+                            <bdi>{m.name || m.student_id}</bdi>
+                          </Badge>
+                        ))}
+                        {group.members.length < type.min_members && (
+                          <Badge variant="outline">
+                            {t("group.belowMin", { min: type.min_members })}
+                          </Badge>
+                        )}
+                      </div>
+                      {editable && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={t("common.delete")}
+                          onClick={() => {
+                            if (
+                              !confirm(
+                                t("common.deleteConfirm", {
+                                  item: `${type.title} ${group.number}`,
+                                }),
+                              )
+                            )
+                              return;
+                            call(() =>
+                              api.delete(
+                                `/courses/${courseId}/groups/${group.id}`,
+                              ),
+                            );
+                          }}
+                        >
+                          <Trash2 />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+
+      {editing && (
+        <GroupTypeDialog
+          courseId={courseId}
+          type={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            onChanged();
+          }}
+        />
+      )}
+    </Card>
+  );
+}
+
+function GroupTypeDialog({
+  courseId,
+  type,
+  onClose,
+  onSaved,
+}: {
+  courseId: number;
+  type: GroupType | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useI18n();
+  const [title, setTitle] = useState(type?.title ?? "");
+  const [description, setDescription] = useState(type?.description ?? "");
+  const [min, setMin] = useState(String(type?.min_members ?? 1));
+  const [max, setMax] = useState(String(type?.max_members ?? 3));
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const body = {
+      title,
+      description,
+      min_members: Number(min),
+      max_members: Number(max),
+    };
+    setSaving(true);
+    try {
+      if (type)
+        await api.patch(`/courses/${courseId}/group-types/${type.id}`, body);
+      else await api.post(`/courses/${courseId}/group-types`, body);
+      onSaved();
+    } catch (err) {
+      toast.error(errorMessage(err, t("group.error")));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {t(type ? "common.editTitle" : "common.newTitle", {
+              item: t("group.item"),
+            })}
+          </DialogTitle>
+        </DialogHeader>
+        <form className="flex flex-col gap-4" onSubmit={submit}>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="group-title">{t("group.name")}</Label>
+            <Input
+              id="group-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="group-description">{t("field.description")}</Label>
+            <Textarea
+              id="group-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-4">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="group-min">{t("group.min")}</Label>
+              <Input
+                id="group-min"
+                type="number"
+                min={1}
+                value={min}
+                onChange={(e) => setMin(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="group-max">{t("group.max")}</Label>
+              <Input
+                id="group-max"
+                type="number"
+                min={Number(min) || 1}
+                value={max}
+                onChange={(e) => setMax(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? t("common.saving") : t("common.save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

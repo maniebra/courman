@@ -4,12 +4,15 @@ from django.middleware.csrf import get_token
 from ninja import Router
 from ninja.errors import HttpError
 from ninja.pagination import paginate
-from ninja.security import SessionAuth, SessionAuthIsStaff
+from ninja.security import SessionAuth
 
 from commons.crud import ModelCrudView, aget_or_404
 from iam.models import Role, RoleAction, User
+from iam.actions import ACTION_CATALOGUE, Actions
+from iam.permissions import HasAction
 from iam.repository import RoleActionRepository, RoleRepository, UserRepository
 from iam.schemas import (
+    ActionCatalogueSchema,
     UserBriefSchema,
     LoginSchema,
     MessageSchema,
@@ -25,7 +28,10 @@ from iam.schemas import (
 )
 
 session_auth = SessionAuth()
-staff_auth = SessionAuthIsStaff()
+view_users = HasAction(Actions.USERS_VIEW)
+manage_users = HasAction(Actions.USERS_MANAGE)
+view_roles = HasAction(Actions.ROLES_VIEW)
+manage_roles = HasAction(Actions.ROLES_MANAGE)
 
 
 # --- auth -------------------------------------------------------------------
@@ -69,7 +75,7 @@ async def me(request):
 
 # --- users --------------------------------------------------------------
 
-users_router = Router(tags=["users"], auth=staff_auth)
+users_router = Router(tags=["users"], auth=view_users)
 
 
 class UserCrud(ModelCrudView[User]):
@@ -95,12 +101,13 @@ async def list_users(request):
     return user_crud.list()
 
 
-@users_router.get("/lookup", response=list[UserBriefSchema], auth=session_auth)
+@users_router.get("/lookup", response=list[UserBriefSchema], auth=view_users)
 async def lookup_users(request, q: str = "", limit: int = 20):
-    """Username search for any signed-in user.
+    """Username search for anyone holding `users.view`.
 
-    Course managers need to pick people (students, graders) without being staff,
-    so this returns the brief representation only - no roles, no email.
+    Course managers need to pick people (staff, graders) without being able to
+    edit accounts, so this returns the brief representation only - no roles, no
+    email - and the Professor and Head TA roles are seeded with `users.view`.
     """
     users = UserRepository.list_users()
     if q:
@@ -113,22 +120,22 @@ async def get_user(request, user_id: int):
     return await user_crud.retrieve(user_id)
 
 
-@users_router.post("/", response={201: UserCrud.schema})
+@users_router.post("/", response={201: UserCrud.schema}, auth=manage_users)
 async def create_user(request, payload: UserCrud.create_schema):
     return 201, await user_crud.create(payload)
 
 
-@users_router.patch("/{user_id}", response=UserCrud.schema)
+@users_router.patch("/{user_id}", response=UserCrud.schema, auth=manage_users)
 async def update_user(request, user_id: int, payload: UserCrud.update_schema):
     return await user_crud.update(user_id, payload)
 
 
-@users_router.delete("/{user_id}", response=MessageSchema)
+@users_router.delete("/{user_id}", response=MessageSchema, auth=manage_users)
 async def delete_user(request, user_id: int):
     return await user_crud.destroy(user_id)
 
 
-@users_router.post("/{user_id}/roles/{role_id}", response=UserSchema)
+@users_router.post("/{user_id}/roles/{role_id}", response=UserSchema, auth=manage_users)
 async def assign_role_to_user(request, user_id: int, role_id: int):
     user = await aget_or_404(UserRepository.get_user(user_id), "User not found")
     role = await aget_or_404(RoleRepository.get_role(role_id), "Role not found")
@@ -136,7 +143,7 @@ async def assign_role_to_user(request, user_id: int, role_id: int):
     return await UserRepository.get_user(user_id)
 
 
-@users_router.delete("/{user_id}/roles/{role_id}", response=UserSchema)
+@users_router.delete("/{user_id}/roles/{role_id}", response=UserSchema, auth=manage_users)
 async def remove_role_from_user(request, user_id: int, role_id: int):
     user = await aget_or_404(UserRepository.get_user(user_id), "User not found")
     role = await aget_or_404(RoleRepository.get_role(role_id), "Role not found")
@@ -146,7 +153,7 @@ async def remove_role_from_user(request, user_id: int, role_id: int):
 
 # --- roles --------------------------------------------------------------
 
-roles_router = Router(tags=["roles"], auth=staff_auth)
+roles_router = Router(tags=["roles"], auth=view_roles)
 
 
 class RoleCrud(ModelCrudView[Role]):
@@ -177,22 +184,22 @@ async def get_role(request, role_id: int):
     return await role_crud.retrieve(role_id)
 
 
-@roles_router.post("/", response={201: RoleCrud.schema})
+@roles_router.post("/", response={201: RoleCrud.schema}, auth=manage_roles)
 async def create_role(request, payload: RoleCrud.create_schema):
     return 201, await role_crud.create(payload)
 
 
-@roles_router.patch("/{role_id}", response=RoleCrud.schema)
+@roles_router.patch("/{role_id}", response=RoleCrud.schema, auth=manage_roles)
 async def update_role(request, role_id: int, payload: RoleCrud.update_schema):
     return await role_crud.update(role_id, payload)
 
 
-@roles_router.delete("/{role_id}", response=MessageSchema)
+@roles_router.delete("/{role_id}", response=MessageSchema, auth=manage_roles)
 async def delete_role(request, role_id: int):
     return await role_crud.destroy(role_id)
 
 
-@roles_router.post("/{role_id}/actions/{action_id}", response=RoleSchema)
+@roles_router.post("/{role_id}/actions/{action_id}", response=RoleSchema, auth=manage_roles)
 async def assign_action_to_role(request, role_id: int, action_id: int):
     role = await aget_or_404(RoleRepository.get_role(role_id), "Role not found")
     action = await aget_or_404(RoleActionRepository.get_action(action_id), "Action not found")
@@ -200,7 +207,7 @@ async def assign_action_to_role(request, role_id: int, action_id: int):
     return await RoleRepository.get_role(role_id)
 
 
-@roles_router.delete("/{role_id}/actions/{action_id}", response=RoleSchema)
+@roles_router.delete("/{role_id}/actions/{action_id}", response=RoleSchema, auth=manage_roles)
 async def remove_action_from_role(request, role_id: int, action_id: int):
     role = await aget_or_404(RoleRepository.get_role(role_id), "Role not found")
     action = await aget_or_404(RoleActionRepository.get_action(action_id), "Action not found")
@@ -210,7 +217,7 @@ async def remove_action_from_role(request, role_id: int, action_id: int):
 
 # --- role actions ---------------------------------------------------------
 
-actions_router = Router(tags=["actions"], auth=staff_auth)
+actions_router = Router(tags=["actions"], auth=view_roles)
 
 
 class ActionCrud(ModelCrudView[RoleAction]):
@@ -236,22 +243,32 @@ async def list_actions(request):
     return action_crud.list()
 
 
+@actions_router.get("/catalogue", response=list[ActionCatalogueSchema])
+async def action_catalogue(request):
+    """The action names the API enforces.
+
+    Rows in the actions table are free text, so anything outside this list is
+    stored but never checked - the UI uses this to tell the two apart.
+    """
+    return [{"name": name, "description": description} for name, description in ACTION_CATALOGUE.items()]
+
+
 @actions_router.get("/{action_id}", response=ActionCrud.schema)
 async def get_action(request, action_id: int):
     return await action_crud.retrieve(action_id)
 
 
-@actions_router.post("/", response={201: ActionCrud.schema})
+@actions_router.post("/", response={201: ActionCrud.schema}, auth=manage_roles)
 async def create_action(request, payload: ActionCrud.create_schema):
     return 201, await action_crud.create(payload)
 
 
-@actions_router.patch("/{action_id}", response=ActionCrud.schema)
+@actions_router.patch("/{action_id}", response=ActionCrud.schema, auth=manage_roles)
 async def update_action(request, action_id: int, payload: ActionCrud.update_schema):
     return await action_crud.update(action_id, payload)
 
 
-@actions_router.delete("/{action_id}", response=MessageSchema)
+@actions_router.delete("/{action_id}", response=MessageSchema, auth=manage_roles)
 async def delete_action(request, action_id: int):
     return await action_crud.destroy(action_id)
 

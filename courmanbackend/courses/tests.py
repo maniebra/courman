@@ -11,13 +11,23 @@ def _json(response):
 
 
 class CourseCrudTests(TestCase):
-    async def _login_staff(self):
-        await User.objects.acreate_user(username="admin", password="s3cret-pass", is_staff=True)
+    async def _login_admin(self, *actions):
+        """Sign in as someone whose role holds `actions` (all of them by default)."""
+        from iam.actions import ACTION_CATALOGUE
+        from iam.models import Role, RoleAction
+
+        user = await User.objects.acreate_user(username="admin", password="s3cret-pass")
+        role = await Role.objects.acreate(name="Test role")
+        for name in actions or ACTION_CATALOGUE:
+            action, _ = await RoleAction.objects.aget_or_create(name=name)
+            await role.actions.aadd(action)
+        await user.roles.aadd(role)
         await self.async_client.post(
             "/api/iam/auth/login",
             data={"username": "admin", "password": "s3cret-pass"},
             content_type="application/json",
         )
+        return user
 
     async def _login(self, username="alice"):
         await User.objects.acreate_user(username=username, password="s3cret-pass")
@@ -41,7 +51,7 @@ class CourseCrudTests(TestCase):
         self.assertEqual(response.status_code, 401)
 
     async def test_staff_can_crud_course(self):
-        await self._login_staff()
+        await self._login_admin()
 
         create_response = await self.async_client.post(
             "/api/courses/",
@@ -66,7 +76,7 @@ class CourseCrudTests(TestCase):
         self.assertFalse(await Course.objects.filter(id=course_id).aexists())
 
     async def test_duplicate_course_code_conflicts(self):
-        await self._login_staff()
+        await self._login_admin()
         await Course.objects.acreate(code="CS101", name="Intro to CS")
         response = await self.async_client.post(
             "/api/courses/", data={"code": "CS101", "name": "Other"}, content_type="application/json"
@@ -74,7 +84,7 @@ class CourseCrudTests(TestCase):
         self.assertEqual(response.status_code, 409)
 
     async def test_assign_and_remove_staff(self):
-        await self._login_staff()
+        await self._login_admin()
         course = await Course.objects.acreate(code="CS101", name="Intro to CS")
         prof = await User.objects.acreate_user(username="prof", password="s3cret-pass")
         ta = await User.objects.acreate_user(username="ta", password="s3cret-pass")
@@ -92,7 +102,7 @@ class CourseCrudTests(TestCase):
         self.assertEqual(_json(remove_response)["professors"], [])
 
     async def test_same_code_allowed_in_different_semesters(self):
-        await self._login_staff()
+        await self._login_admin()
         await Course.objects.acreate(code="CS101", name="Intro to CS", semester="Fall 2026")
 
         again = await self.async_client.post(
@@ -111,7 +121,7 @@ class CourseCrudTests(TestCase):
         self.assertEqual(clash.status_code, 409)
 
     async def test_student_roster_crud(self):
-        await self._login_staff()
+        await self._login_admin()
         course = await Course.objects.acreate(code="CS300", name="Rostered")
 
         created = await self.async_client.post(
@@ -149,3 +159,75 @@ class CourseCrudTests(TestCase):
         removed = await self.async_client.delete(f"/api/courses/{course.id}/students/{student_pk}")
         self.assertEqual(removed.status_code, 200)
         self.assertFalse(await Student.objects.filter(pk=student_pk).aexists())
+
+
+    async def test_group_types_are_independent_but_groups_within_one_are_not(self):
+        await self._login_admin()
+        course = await Course.objects.acreate(code="CS400", name="Grouped")
+        one = await Student.objects.acreate(course=course, student_id="1")
+        two = await Student.objects.acreate(course=course, student_id="2")
+
+        bad = await self.async_client.post(
+            f"/api/courses/{course.id}/group-types",
+            data={"title": "Bad", "min_members": 3, "max_members": 2},
+            content_type="application/json",
+        )
+        self.assertEqual(bad.status_code, 422)
+
+        created = await self.async_client.post(
+            f"/api/courses/{course.id}/group-types",
+            data={"title": "Project", "description": "Term project", "min_members": 1, "max_members": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(created.status_code, 201)
+        project = _json(created)["id"]
+
+        duplicate = await self.async_client.post(
+            f"/api/courses/{course.id}/group-types",
+            data={"title": "Project"},
+            content_type="application/json",
+        )
+        self.assertEqual(duplicate.status_code, 409)
+
+        # groups of a type are numbered from 1
+        await self.async_client.post(f"/api/courses/{course.id}/group-types/{project}/groups")
+        added = await self.async_client.post(f"/api/courses/{course.id}/group-types/{project}/groups")
+        self.assertEqual([g["number"] for g in _json(added)["groups"]], [1, 2])
+        p1, p2 = (g["id"] for g in _json(added)["groups"])
+
+        joined = await self.async_client.post(f"/api/courses/{course.id}/groups/{p1}/members/{one.id}")
+        self.assertEqual([m["student_id"] for m in _json(joined)["groups"][0]["members"]], ["1"])
+
+        full = await self.async_client.post(f"/api/courses/{course.id}/groups/{p1}/members/{two.id}")
+        self.assertEqual(full.status_code, 409)
+
+        # joining a sibling group of the same type leaves the first one
+        moved = await self.async_client.post(f"/api/courses/{course.id}/groups/{p2}/members/{one.id}")
+        self.assertEqual([[m["id"] for m in g["members"]] for g in _json(moved)["groups"]], [[], [one.id]])
+
+        # a group of another type is joined on top, not instead
+        lab = _json(
+            await self.async_client.post(
+                f"/api/courses/{course.id}/group-types",
+                data={"title": "Lab", "max_members": 4},
+                content_type="application/json",
+            )
+        )["id"]
+        lab1 = _json(await self.async_client.post(f"/api/courses/{course.id}/group-types/{lab}/groups"))["groups"][0]["id"]
+        await self.async_client.post(f"/api/courses/{course.id}/groups/{lab1}/members/{one.id}")
+        self.assertEqual(await one.groups.acount(), 2)
+
+        await self.async_client.post(f"/api/courses/{course.id}/groups/{lab1}/members/{two.id}")
+        shrunk = await self.async_client.patch(
+            f"/api/courses/{course.id}/group-types/{lab}",
+            data={"max_members": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(shrunk.status_code, 409)
+
+        left = await self.async_client.delete(f"/api/courses/{course.id}/groups/{lab1}/members/{one.id}")
+        self.assertEqual([m["id"] for m in _json(left)["groups"][0]["members"]], [two.id])
+
+        deleted = await self.async_client.delete(f"/api/courses/{course.id}/group-types/{project}")
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(await one.groups.acount(), 0)

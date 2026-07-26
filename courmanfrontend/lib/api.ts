@@ -36,8 +36,23 @@ export type User = {
   email: string;
   is_active: boolean;
   is_staff: boolean;
+  is_superuser: boolean;
   roles: Role[];
+  /** every action the user holds, flattened from their roles by the API */
+  actions: string[];
 };
+
+/** Action names, mirroring iam/actions.py. */
+export const ACTIONS = {
+  usersView: "users.view",
+  usersManage: "users.manage",
+  rolesView: "roles.view",
+  rolesManage: "roles.manage",
+  coursesView: "courses.view",
+  coursesManage: "courses.manage",
+  courseStaffManage: "courses.staff.manage",
+  studentsManage: "students.manage",
+} as const;
 
 export type Course = {
   id: number;

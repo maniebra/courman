@@ -32,7 +32,7 @@ export function UserMenu() {
 
   const roles = user.roles.map((r) => r.name).join(", ");
   const subtitle =
-    roles || user.email || (user.is_staff ? t("user.staff") : "");
+    roles || user.email || (user.is_superuser ? t("user.superuser") : "");
 
   async function logout() {
     await api.post("/iam/auth/logout");
