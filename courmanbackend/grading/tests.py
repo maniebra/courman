@@ -214,6 +214,44 @@ class GradingSheetTests(TestCase):
         self.assertEqual(len(body["subgrades"]), 1)
         self.assertEqual(len(body["scores"]), 1)
 
+        commented = await self.async_client.put(
+            f"/api/grading/subgrades/{subgrade_id}/scores/{student.id}",
+            data={"value": 7.5, "comment": "half marks"},
+            content_type="application/json",
+        )
+        self.assertEqual(commented.status_code, 200)
+
+        # publishing hands out a read-only copy, and unpublishing takes it back
+        published = await self.async_client.patch(
+            f"/api/grading/sheets/{sheet_id}",
+            data={"public": True},
+            content_type="application/json",
+        )
+        token = _json(published)["public_token"]
+        self.assertIsNotNone(token)
+
+        await self.async_client.post("/api/iam/auth/logout")
+        public = await self.async_client.get(f"/api/grading/public/sheets/{token}")
+        body = _json(public)
+        self.assertEqual(body["subgrades"], ["Q1"])
+        self.assertEqual(
+            body["rows"],
+            [{"student_id": "99001", "cells": [{"value": 7.5, "comment": "half marks"}], "total": 7.5}],
+        )
+        self.assertNotIn("name", str(body))
+
+        await self._login("sheet-prof")
+        await self.async_client.patch(
+            f"/api/grading/sheets/{sheet_id}",
+            data={"public": False},
+            content_type="application/json",
+        )
+        await self.async_client.post("/api/iam/auth/logout")
+        self.assertEqual(
+            (await self.async_client.get(f"/api/grading/public/sheets/{token}")).status_code, 404
+        )
+
+        await self._login("sheet-prof")
         deleted = await self.async_client.delete(f"/api/grading/sheets/{sheet_id}")
         self.assertEqual(deleted.status_code, 200)
         self.assertFalse(await GradingComponent.objects.filter(sheet__isnull=False).aexists())

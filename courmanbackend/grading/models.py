@@ -43,6 +43,8 @@ class GradingSheet(models.Model):
 
     component = models.OneToOneField(GradingComponent, related_name="sheet", on_delete=models.CASCADE)
     title = models.CharField(max_length=128)
+    #: set to publish a read-only copy at /sheets/<token>; cleared to unpublish
+    public_token = models.UUIDField(null=True, blank=True, unique=True, default=None)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

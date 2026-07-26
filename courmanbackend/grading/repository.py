@@ -74,6 +74,12 @@ class GradingSheetRepository:
         return sheet
 
     @staticmethod
+    async def set_public_token(sheet: GradingSheet, token) -> None:
+        """Its own setter because `update_sheet` treats None as "leave alone"."""
+        sheet.public_token = token
+        await sheet.asave(update_fields=["public_token", "updated_at"])
+
+    @staticmethod
     async def delete_sheet(sheet: GradingSheet) -> None:
         await sheet.adelete()
 

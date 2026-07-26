@@ -210,5 +210,9 @@
   "todo.grading": "تصحیح‌های محول‌شده",
   "todo.noGrading": "چیزی به شما محول نشده است.",
   "todo.courses": "درس‌های شما",
-  "todo.openForms": "{count} فرم باز"
+  "todo.openForms": "{count} فرم باز",
+  "sheet.publish": "انتشار",
+  "sheet.unpublish": "لغو انتشار",
+  "sheet.publishHint": "انتشار نسخهٔ فقط‌خواندنی: شمارهٔ دانشجویی و نمره‌ها، بدون نام و توضیح",
+  "sheet.notPublished": "این کاربرگ منتشر نشده است."
 }

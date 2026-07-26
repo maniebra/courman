@@ -1,3 +1,5 @@
+from uuid import UUID, uuid4
+
 from django.db import IntegrityError
 from ninja import Router
 from ninja.errors import HttpError
@@ -7,8 +9,9 @@ from courses.models import Course
 from courses.repository import CourseRepository, StudentRepository
 from commons.crud import aget_or_404
 from grading.repository import GradingComponentRepository, GradingSheetRepository, GradingTaskRepository
-from grading.models import GradingComponent, GradingSheet, SubGrade
+from grading.models import GradingComponent, GradingSheet, Score, SubGrade
 from grading.schemas import (
+    PublicSheetSchema,
     GradingComponentCreateSchema,
     GradingComponentSchema,
     GradingComponentUpdateSchema,
@@ -168,7 +171,12 @@ async def create_sheet(request, component_id: int, payload: GradingSheetCreateSc
 async def update_sheet(request, sheet_id: int, payload: GradingSheetUpdateSchema):
     sheet = await _get_sheet_or_404(sheet_id)
     await _require_professor_or_head_ta(sheet.component.course, request.auth)
-    return await GradingSheetRepository.update_sheet(sheet, **payload.dict(exclude_unset=True))
+    fields = payload.dict(exclude_unset=True)
+    public = fields.pop("public", None)
+    if public is not None:
+        # a fresh token would break links already handed out, so keep the one we have
+        await GradingSheetRepository.set_public_token(sheet, (sheet.public_token or uuid4()) if public else None)
+    return await GradingSheetRepository.update_sheet(sheet, **fields)
 
 
 @api.delete("/sheets/{sheet_id}", response=MessageSchema, auth=session_auth)
@@ -265,3 +273,44 @@ async def set_scores(request, sheet_id: int, payload: ScoreBulkSchema):
             )
         )
     return saved
+
+
+# --- the published sheet: no session, guarded by an unguessable token ---
+
+
+@api.get("/public/sheets/{token}", response=PublicSheetSchema)
+def public_sheet(request, token: UUID):
+    """Scores by student ID. Names and comments stay behind the login."""
+    sheet = (
+        GradingSheet.objects.select_related("component__course").filter(public_token=token).first()
+    )
+    if sheet is None:
+        raise HttpError(404, "This sheet is not published")
+
+    subgrades = list(sheet.subgrades.all())
+    scores = {
+        (score.student_id, score.subgrade_id): score
+        for score in Score.objects.filter(subgrade__sheet=sheet)
+    }
+    rows = []
+    for student in sheet.component.course.students.all():
+        cells = [scores.get((student.id, subgrade.id)) for subgrade in subgrades]
+        given = [cell.value for cell in cells if cell is not None and cell.value is not None]
+        rows.append(
+            {
+                "student_id": student.student_id,
+                "cells": [
+                    {"value": cell.value, "comment": cell.comment} if cell else {}
+                    for cell in cells
+                ],
+                "total": sum(given) if given else None,
+            }
+        )
+    return {
+        "course": str(sheet.component.course),
+        "component": sheet.component.name,
+        "title": sheet.title,
+        "subgrades": [subgrade.name for subgrade in subgrades],
+        "max_scores": [subgrade.max_score for subgrade in subgrades],
+        "rows": rows,
+    }

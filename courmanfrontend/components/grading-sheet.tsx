@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MessageSquare, Plus, Trash2 } from "lucide-react";
+import { Link2, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, errorMessage } from "@/lib/api";
@@ -21,7 +21,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 type Student = { id: number; student_id: string; name: string };
-type Sheet = { id: number; component: number; title: string };
+type Sheet = {
+  id: number;
+  component: number;
+  title: string;
+  /** set while the read-only copy at /sheets/<token> is published */
+  public_token: string | null;
+};
 type SubGrade = { id: number; name: string; max_score: string };
 type Score = {
   comment: string;
@@ -90,17 +96,53 @@ export function GradingSheet({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">{full.sheet.title}</h1>
         {canManage && (
-          <Button
-            variant="ghost"
-            size="icon"
-            title={t("common.delete")}
-            onClick={remove}
-          >
-            <Trash2 />
-          </Button>
+          <div className="flex items-center gap-2">
+            {full.sheet.public_token && (
+              <button
+                type="button"
+                className="flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
+                onClick={() => {
+                  navigator.clipboard.writeText(
+                    `${location.origin}/sheets/${full.sheet.public_token}`,
+                  );
+                  toast.success(t("signup.copied"));
+                }}
+              >
+                <Link2 className="size-4" /> {t("signup.copyLink")}
+              </button>
+            )}
+            <Button
+              size="sm"
+              variant={full.sheet.public_token ? "secondary" : "outline"}
+              title={t("sheet.publishHint")}
+              onClick={async () => {
+                try {
+                  await api.patch(`/grading/sheets/${sheetId}`, {
+                    public: !full.sheet.public_token,
+                  });
+                  load();
+                } catch (err) {
+                  toast.error(errorMessage(err, t("err.update")));
+                }
+              }}
+            >
+              <Link2 />
+              {full.sheet.public_token
+                ? t("sheet.unpublish")
+                : t("sheet.publish")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title={t("common.delete")}
+              onClick={remove}
+            >
+              <Trash2 />
+            </Button>
+          </div>
         )}
       </div>
 

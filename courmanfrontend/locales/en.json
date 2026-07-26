@@ -210,5 +210,9 @@
   "todo.grading": "Assigned grading",
   "todo.noGrading": "Nothing assigned to you.",
   "todo.courses": "Your courses",
-  "todo.openForms": "{count} open forms"
+  "todo.openForms": "{count} open forms",
+  "sheet.publish": "Publish",
+  "sheet.unpublish": "Unpublish",
+  "sheet.publishHint": "Share a read-only sheet: student IDs and scores, no names or comments",
+  "sheet.notPublished": "This sheet is not published."
 }

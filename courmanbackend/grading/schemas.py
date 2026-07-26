@@ -84,7 +84,7 @@ class ScoreSetSchema(Schema):
 class GradingSheetSchema(ModelSchema):
     class Meta:
         model = GradingSheet
-        fields = ["id", "component", "title", "created_at", "updated_at"]
+        fields = ["id", "component", "title", "public_token", "created_at", "updated_at"]
 
 
 class GradingSheetCreateSchema(Schema):
@@ -93,6 +93,8 @@ class GradingSheetCreateSchema(Schema):
 
 class GradingSheetUpdateSchema(Schema):
     title: Optional[str] = None
+    #: True publishes the read-only sheet (keeping any existing link), False unpublishes
+    public: Optional[bool] = None
 
 
 class GradingSheetFullSchema(Schema):
@@ -103,6 +105,29 @@ class GradingSheetFullSchema(Schema):
     students: list[StudentSchema]
     scores: list[ScoreSchema]
     can_edit: bool
+
+
+class PublicCellSchema(Schema):
+    value: Optional[float] = None
+    comment: str = ""
+
+
+class PublicScoreRowSchema(Schema):
+    student_id: str
+    #: one cell per sub-grade, in the same order; empty where nothing is entered
+    cells: list[PublicCellSchema]
+    total: Optional[float] = None
+
+
+class PublicSheetSchema(Schema):
+    """The published sheet: student IDs, scores and the graders' comments, no names."""
+
+    course: str
+    component: str
+    title: str
+    subgrades: list[str]
+    max_scores: list[float]
+    rows: list[PublicScoreRowSchema]
 
 
 class ScoreEntrySchema(Schema):
