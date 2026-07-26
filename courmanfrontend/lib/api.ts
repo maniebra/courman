@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { isAxiosError } from "axios";
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? "/api",
@@ -6,6 +6,22 @@ export const api = axios.create({
   xsrfCookieName: "csrftoken",
   xsrfHeaderName: "X-CSRFToken",
 });
+
+/** All list endpoints are ninja-paginated: `{ items, count }`. */
+export async function listAll<T>(path: string, limit = 100) {
+  const res = await api.get<{ items: T[]; count: number }>(path + "/", {
+    params: { limit },
+  });
+  return res.data;
+}
+
+export function errorMessage(err: unknown, fallback = "Something went wrong") {
+  if (isAxiosError(err)) {
+    const detail = err.response?.data?.detail;
+    if (typeof detail === "string") return detail;
+  }
+  return fallback;
+}
 
 export type Role = {
   id: number;
