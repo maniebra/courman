@@ -1,7 +1,8 @@
 from uuid import UUID, uuid4
 
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
+from django.utils import timezone
 from ninja import Router
 from ninja.errors import HttpError
 from ninja.pagination import paginate
@@ -9,7 +10,7 @@ from ninja.security import SessionAuth
 from ninja.throttling import AnonRateThrottle
 
 from commons.crud import ModelCrudView, aget_or_404
-from courses.models import Course, Group, GroupType, HandoffItem, Student
+from courses.models import Course, Group, GroupType, HandoffItem, HandoffSlot, Student
 from courses.repository import CourseRepository, GroupRepository, HandoffRepository, StudentRepository
 from iam.actions import Actions
 from iam.permissions import HasAction
@@ -31,6 +32,7 @@ from courses.schemas import (
     StudentCreateSchema,
     StudentSchema,
     StudentUpdateSchema,
+    TodoSchema,
 )
 from iam.repository import UserRepository
 from iam.schemas import MessageSchema
@@ -555,3 +557,74 @@ def book_handoff(request, token: UUID, payload: HandoffBookingSchema):
     slot.teammates_confirmed = True
     slot.save(update_fields=["group", "booked_by", "teammates_confirmed"])
     return 201, {"detail": f"Booked {slot.start:%Y-%m-%d %H:%M} for {item.group_type.title} {group.number}"}
+
+
+@api.get("/me/todo", response=TodoSchema, auth=session_auth)
+def my_todo(request):
+    """What this professor, head TA or TA has coming up. Sync: it is all aggregation."""
+    from grading.models import GradingTask
+
+    user = request.auth
+    now = timezone.now()
+
+    slots = (
+        HandoffSlot.objects.filter(ta=user, end__gte=now)
+        .select_related("item__course", "group__type")
+        .prefetch_related("group__members")
+        .order_by("start")[:50]
+    )
+    handoffs = [
+        {
+            "id": slot.id,
+            "course_id": slot.item.course_id,
+            "course": slot.item.course.code,
+            "item": slot.item.title,
+            "start": slot.start,
+            "end": slot.end,
+            "group": f"{slot.group.type.title} {slot.group.number}" if slot.group else "",
+            "members": [student.student_id for student in slot.group.members.all()] if slot.group else [],
+        }
+        for slot in slots
+    ]
+
+    tasks = GradingTask.objects.filter(assigned_to=user).select_related("component__course", "component__sheet")
+    grading = [
+        {
+            "component_id": task.component_id,
+            "course_id": task.component.course_id,
+            "course": task.component.course.code,
+            "component": task.component.name,
+            "sheet_id": getattr(task.component, "sheet", None) and task.component.sheet.id,
+        }
+        for task in tasks
+    ]
+
+    courses = []
+    for course in (
+        Course.objects.filter(
+            Q(professors=user) | Q(head_tas=user) | Q(tas=user)
+        )
+        .distinct()
+        .prefetch_related("professors", "head_tas", "tas")
+    ):
+        if user in course.professors.all():
+            role = "professor"
+        elif user in course.head_tas.all():
+            role = "head_ta"
+        else:
+            role = "ta"
+        courses.append(
+            {
+                "id": course.id,
+                "code": course.code,
+                "name": course.name,
+                "role": role,
+                "students": course.students.count(),
+                "open_forms": (
+                    course.group_types.filter(signup_token__isnull=False).count()
+                    + course.handoff_items.filter(signup_token__isnull=False).count()
+                ),
+            }
+        )
+
+    return {"handoffs": handoffs, "grading": grading, "courses": courses}

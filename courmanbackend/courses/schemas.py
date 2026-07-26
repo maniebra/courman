@@ -162,3 +162,39 @@ class HandoffBookingSchema(Schema):
     student_id: str
     slot_id: int
     teammates_confirmed: bool = False
+
+
+class TodoSlotSchema(Schema):
+    id: int
+    course_id: int
+    course: str
+    item: str
+    start: datetime
+    end: datetime
+    group: str = ""
+    members: list[str] = []
+
+
+class TodoGradingSchema(Schema):
+    component_id: int
+    course_id: int
+    course: str
+    component: str
+    sheet_id: Optional[int] = None
+
+
+class TodoCourseSchema(Schema):
+    id: int
+    code: str
+    name: str
+    role: str
+    students: int
+    open_forms: int
+
+
+class TodoSchema(Schema):
+    """The dashboard for whoever is signed in: their slots, their grading, their courses."""
+
+    handoffs: list[TodoSlotSchema]
+    grading: list[TodoGradingSchema]
+    courses: list[TodoCourseSchema]

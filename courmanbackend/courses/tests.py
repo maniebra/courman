@@ -434,3 +434,49 @@ class CourseCrudTests(TestCase):
         self.assertEqual(await course.students.acount(), 3)
         self.assertEqual(outsider.student_id, "3")
         self.assertEqual(admin.username, "admin")
+
+    async def test_my_todo(self):
+        user = await self._login_admin()
+        course = await Course.objects.acreate(code="CS700", name="Todo")
+        await course.tas.aadd(user)
+        student = await Student.objects.acreate(course=course, student_id="1")
+
+        type_pk = _json(
+            await self.async_client.post(
+                f"/api/courses/{course.id}/group-types",
+                data={"title": "Project", "max_members": 2},
+                content_type="application/json",
+            )
+        )["id"]
+        group_pk = _json(
+            await self.async_client.post(f"/api/courses/{course.id}/group-types/{type_pk}/groups")
+        )["groups"][0]["id"]
+        await self.async_client.post(f"/api/courses/{course.id}/groups/{group_pk}/members/{student.id}")
+
+        item_pk = _json(
+            await self.async_client.post(
+                f"/api/courses/{course.id}/handoffs",
+                data={"group_type": type_pk, "title": "Phase 1", "slot_minutes": 60},
+                content_type="application/json",
+            )
+        )["id"]
+        # one slot in the past, one ahead: only what is still coming shows up
+        await self.async_client.post(
+            f"/api/courses/{course.id}/handoffs/{item_pk}/slots",
+            data={"start": "2020-01-01T10:00:00Z", "end": "2020-01-01T11:00:00Z"},
+            content_type="application/json",
+        )
+        await self.async_client.post(
+            f"/api/courses/{course.id}/handoffs/{item_pk}/slots",
+            data={"start": "2099-01-01T10:00:00Z", "end": "2099-01-01T11:00:00Z"},
+            content_type="application/json",
+        )
+
+        todo = _json(await self.async_client.get("/api/courses/me/todo"))
+        self.assertEqual([slot["start"][:4] for slot in todo["handoffs"]], ["2099"])
+        self.assertEqual(todo["handoffs"][0]["course"], "CS700")
+        self.assertEqual([c["code"] for c in todo["courses"]], ["CS700"])
+        self.assertEqual(todo["courses"][0]["role"], "ta")
+        self.assertEqual(todo["courses"][0]["students"], 1)
+        self.assertEqual(todo["courses"][0]["open_forms"], 0)
+        self.assertEqual(todo["grading"], [])

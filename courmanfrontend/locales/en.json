@@ -203,5 +203,12 @@
   "handoff.to": "To",
   "handoff.tooShort": "Pick a window of at least {minutes} minutes.",
   "handoff.clearBooking": "Free this slot",
-  "handoff.clearConfirm": "Cancel this group's booking and put the slot back on offer?"
+  "handoff.clearConfirm": "Cancel this group's booking and put the slot back on offer?",
+  "todo.schedule": "Your handoff sessions",
+  "todo.scheduleHint": "Slots you are down for, soonest first.",
+  "todo.noSchedule": "Nothing coming up.",
+  "todo.grading": "Assigned grading",
+  "todo.noGrading": "Nothing assigned to you.",
+  "todo.courses": "Your courses",
+  "todo.openForms": "{count} open forms"
 }

@@ -10,6 +10,7 @@ import { useI18n } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Todo } from "@/components/todo";
 
 export default function AdminDashboard() {
   const { t } = useI18n();
@@ -37,6 +38,8 @@ export default function AdminDashboard() {
         </h1>
         <p className="text-sm text-muted-foreground">{t("dash.subtitle")}</p>
       </div>
+
+      <Todo />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {visible.map((r) => (

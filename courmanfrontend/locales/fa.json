@@ -203,5 +203,12 @@
   "handoff.to": "تا ساعت",
   "handoff.tooShort": "بازه‌ای دست‌کم {minutes} دقیقه‌ای انتخاب کنید.",
   "handoff.clearBooking": "آزاد کردن این نوبت",
-  "handoff.clearConfirm": "رزرو این گروه لغو شود و نوبت دوباره آزاد شود؟"
+  "handoff.clearConfirm": "رزرو این گروه لغو شود و نوبت دوباره آزاد شود؟",
+  "todo.schedule": "جلسه‌های تحویل شما",
+  "todo.scheduleHint": "نوبت‌هایی که به عهدهٔ شماست، از نزدیک‌ترین.",
+  "todo.noSchedule": "چیزی در پیش نیست.",
+  "todo.grading": "تصحیح‌های محول‌شده",
+  "todo.noGrading": "چیزی به شما محول نشده است.",
+  "todo.courses": "درس‌های شما",
+  "todo.openForms": "{count} فرم باز"
 }
