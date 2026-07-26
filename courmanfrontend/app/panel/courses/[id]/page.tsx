@@ -17,6 +17,7 @@ import { ACTIONS, api, errorMessage, type User } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useI18n, type Key } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
+import { Handoffs } from "@/components/handoffs";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -192,6 +193,14 @@ export default function CoursePage() {
         students={course.students}
         editable={canEditStudents}
         onChanged={load}
+      />
+
+      <Handoffs
+        courseId={course.id}
+        types={types}
+        staff={[...course.professors, ...course.head_tas, ...course.tas]}
+        canAssignTa={canEditStudents}
+        editable={canEditStudents}
       />
 
       <Grading

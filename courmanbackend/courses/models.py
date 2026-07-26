@@ -93,3 +93,62 @@ class Student(models.Model):
 
     def __str__(self):
         return f"{self.student_id} - {self.name}" if self.name else self.student_id
+
+
+class HandoffItem(models.Model):
+    """Something a group hands off in person, e.g. "Project phase 1".
+
+    Its groups come from a `GroupType`, so a booking belongs to the whole team:
+    whoever books it is only the messenger.
+    """
+
+    course = models.ForeignKey(Course, related_name="handoff_items", on_delete=models.CASCADE)
+    group_type = models.ForeignKey(GroupType, related_name="handoff_items", on_delete=models.CASCADE)
+    title = models.CharField(max_length=128)
+    description = models.TextField(blank=True, default="")
+    #: set to open the public booking form at /handoffs/<token>; cleared to close it
+    signup_token = models.UUIDField(null=True, blank=True, unique=True, default=None)
+    #: keep the TA's name off the public form, so nobody picks their favourite grader
+    hide_ta = models.BooleanField(default=True)
+    #: a TA offers a window; it is sliced into slots this long, this far apart
+    slot_minutes = models.PositiveSmallIntegerField(default=20)
+    break_minutes = models.PositiveSmallIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["title"]
+        unique_together = ["course", "title"]
+
+    def __str__(self):
+        return f"{self.course.code} - {self.title}"
+
+
+class HandoffSlot(models.Model):
+    """A window one TA offered, taken by at most one group."""
+
+    item = models.ForeignKey(HandoffItem, related_name="slots", on_delete=models.CASCADE)
+    ta = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="handoff_slots", on_delete=models.CASCADE)
+    start = models.DateTimeField()
+    end = models.DateTimeField()
+
+    group = models.ForeignKey(Group, related_name="handoff_slots", on_delete=models.SET_NULL, null=True, blank=True)
+    booked_by = models.ForeignKey(Student, related_name="handoff_bookings", on_delete=models.SET_NULL, null=True, blank=True)
+    #: the booker ticked "my teammates are ok with this date"
+    teammates_confirmed = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["start"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(end__gt=models.F("start")), name="handoff_slot_ends_after_start"),
+            # one booking per group per item; several items may share a group type
+            models.UniqueConstraint(
+                fields=["item", "group"], condition=models.Q(group__isnull=False), name="handoff_one_slot_per_group"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.item.title} - {self.start:%Y-%m-%d %H:%M} ({self.ta})"

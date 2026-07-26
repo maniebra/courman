@@ -9,8 +9,8 @@ from ninja.security import SessionAuth
 from ninja.throttling import AnonRateThrottle
 
 from commons.crud import ModelCrudView, aget_or_404
-from courses.models import Course, Group, GroupType, Student
-from courses.repository import CourseRepository, GroupRepository, StudentRepository
+from courses.models import Course, Group, GroupType, HandoffItem, Student
+from courses.repository import CourseRepository, GroupRepository, HandoffRepository, StudentRepository
 from iam.actions import Actions
 from iam.permissions import HasAction
 from courses.schemas import (
@@ -22,6 +22,12 @@ from courses.schemas import (
     GroupTypeCreateSchema,
     GroupTypeSchema,
     GroupTypeUpdateSchema,
+    HandoffBookingSchema,
+    HandoffFormSchema,
+    HandoffItemCreateSchema,
+    HandoffItemSchema,
+    HandoffItemUpdateSchema,
+    HandoffSlotCreateSchema,
     StudentCreateSchema,
     StudentSchema,
     StudentUpdateSchema,
@@ -352,3 +358,200 @@ def group_signup(request, token: UUID, payload: GroupSignupSchema):
     group = Group.objects.create(type=group_type, number=number)
     group.members.set(students)
     return 201, {"detail": f"Signed up as {group_type.title} {number}"}
+
+
+# --- handoff sessions: TAs offer slots, groups book one ---
+
+
+async def _is_course_staff(course: Course, user) -> bool:
+    return await CourseRepository.is_instructor(course, user) or await CourseRepository.is_ta(course, user)
+
+
+async def _require_course_staff(course: Course, user) -> None:
+    """TAs run handoffs too, so this is wider than `_require_course_manager`."""
+    if user.is_superuser or await CourseRepository.has_action(user, Actions.COURSES_MANAGE):
+        return
+    if not await _is_course_staff(course, user):
+        raise HttpError(403, "Only the staff of this course can do that")
+
+
+async def _get_item_or_404(course_id: int, item_pk: int) -> HandoffItem:
+    item = await aget_or_404(HandoffRepository.get_item(item_pk), "Handoff not found")
+    if item.course_id != course_id:
+        raise HttpError(404, "Handoff not found")
+    return item
+
+
+@api.get("/{course_id}/handoffs", response=list[HandoffItemSchema], auth=session_auth)
+async def list_handoffs(request, course_id: int):
+    await aget_or_404(CourseRepository.get_course(course_id), "Course not found")
+    return [item async for item in HandoffRepository.list_items(course_id)]
+
+
+@api.post("/{course_id}/handoffs", response={201: HandoffItemSchema}, auth=manage_students)
+async def create_handoff(request, course_id: int, payload: HandoffItemCreateSchema):
+    course = await aget_or_404(CourseRepository.get_course(course_id), "Course not found")
+    await _require_course_manager(course, request.auth)
+    group_type = await _get_type_or_404(course_id, payload.group_type)
+    if payload.slot_minutes < 1:
+        raise HttpError(422, "A slot has to be at least a minute long")
+    if await HandoffItem.objects.filter(course=course, title=payload.title).aexists():
+        raise HttpError(409, "A handoff with that title already exists in this course")
+    return 201, await HandoffRepository.create_item(
+        course=course,
+        group_type=group_type,
+        title=payload.title,
+        description=payload.description,
+        hide_ta=payload.hide_ta,
+        slot_minutes=payload.slot_minutes,
+        break_minutes=payload.break_minutes,
+    )
+
+
+@api.patch("/{course_id}/handoffs/{item_pk}", response=HandoffItemSchema, auth=manage_students)
+async def update_handoff(request, course_id: int, item_pk: int, payload: HandoffItemUpdateSchema):
+    item = await _get_item_or_404(course_id, item_pk)
+    await _require_course_manager(item.course, request.auth)
+    fields = payload.dict(exclude_unset=True)
+    signup_open = fields.pop("signup_open", None)
+    if signup_open is not None:
+        await HandoffRepository.set_signup_token(item, (item.signup_token or uuid4()) if signup_open else None)
+    if fields.get("slot_minutes") is not None and fields["slot_minutes"] < 1:
+        raise HttpError(422, "A slot has to be at least a minute long")
+    if fields.get("title") and await HandoffItem.objects.filter(
+        course_id=course_id, title=fields["title"]
+    ).exclude(pk=item.pk).aexists():
+        raise HttpError(409, "A handoff with that title already exists in this course")
+    return await HandoffRepository.update_item(item, **fields)
+
+
+@api.delete("/{course_id}/handoffs/{item_pk}", response=MessageSchema, auth=manage_students)
+async def delete_handoff(request, course_id: int, item_pk: int):
+    item = await _get_item_or_404(course_id, item_pk)
+    await _require_course_manager(item.course, request.auth)
+    await HandoffRepository.delete_item(item)
+    return {"detail": "Handoff deleted"}
+
+
+@api.post("/{course_id}/handoffs/{item_pk}/slots", response={201: HandoffItemSchema}, auth=session_auth)
+async def add_handoff_slot(request, course_id: int, item_pk: int, payload: HandoffSlotCreateSchema):
+    """A TA offers their own windows; whoever runs the course may offer one for any TA.
+
+    The window is cut into `slot_minutes` slots with `break_minutes` between them.
+    """
+    item = await _get_item_or_404(course_id, item_pk)
+    await _require_course_staff(item.course, request.auth)
+    if payload.end <= payload.start:
+        raise HttpError(422, "A slot has to end after it starts")
+    ta = request.auth
+    if payload.ta is not None and payload.ta != request.auth.pk:
+        await _require_course_manager(item.course, request.auth)
+        ta = await aget_or_404(UserRepository.get_user(payload.ta), "User not found")
+        if not await _is_course_staff(item.course, ta):
+            raise HttpError(422, "That user is not on this course's staff")
+    if not await HandoffRepository.add_slots(item=item, ta=ta, start=payload.start, end=payload.end):
+        raise HttpError(422, f"That window is shorter than one {item.slot_minutes} minute slot, or is already offered")
+    return 201, await HandoffRepository.get_item(item_pk)
+
+
+@api.delete("/{course_id}/handoff-slots/{slot_pk}", response=HandoffItemSchema, auth=session_auth)
+async def delete_handoff_slot(request, course_id: int, slot_pk: int):
+    slot = await aget_or_404(HandoffRepository.get_slot(slot_pk), "Slot not found")
+    if slot.item.course_id != course_id:
+        raise HttpError(404, "Slot not found")
+    await _require_course_staff(slot.item.course, request.auth)
+    # your own slots are yours to withdraw; taking someone else's off the board
+    # is a call for whoever runs the course
+    if slot.ta_id != request.auth.pk:
+        await _require_course_manager(slot.item.course, request.auth)
+    await HandoffRepository.delete_slot(slot)
+    return await HandoffRepository.get_item(slot.item_id)
+
+
+@api.delete("/{course_id}/handoff-slots/{slot_pk}/booking", response=HandoffItemSchema, auth=session_auth)
+async def clear_handoff_booking(request, course_id: int, slot_pk: int):
+    """Cancelling someone's booking is a professor/head TA call, not the slot owner's."""
+    slot = await aget_or_404(HandoffRepository.get_slot(slot_pk), "Slot not found")
+    if slot.item.course_id != course_id:
+        raise HttpError(404, "Slot not found")
+    await _require_course_manager(slot.item.course, request.auth)
+    await HandoffRepository.clear_booking(slot)
+    return await HandoffRepository.get_item(slot.item_id)
+
+
+# --- public booking form ---
+
+
+def _handoff_form(item: HandoffItem) -> dict:
+    return {
+        "course": str(item.course),
+        "title": item.title,
+        "description": item.description,
+        "group_type": item.group_type.title,
+        "slots": [
+            {
+                "id": slot.id,
+                "start": slot.start,
+                "end": slot.end,
+                # the students see a time, not a person, unless the staff say otherwise
+                "ta": "" if item.hide_ta else (slot.ta.get_full_name() or slot.ta.username),
+                "taken": slot.group_id is not None,
+            }
+            for slot in item.slots.all()
+        ],
+    }
+
+
+@api.get("/public/handoff-forms/{token}", response=HandoffFormSchema)
+def handoff_form(request, token: UUID):
+    item = (
+        HandoffItem.objects.select_related("course", "group_type")
+        .prefetch_related("slots__ta")
+        .filter(signup_token=token)
+        .first()
+    )
+    if item is None:
+        raise HttpError(404, "This booking form is closed or does not exist")
+    return _handoff_form(item)
+
+
+@api.post("/public/handoff-forms/{token}", response={201: MessageSchema}, throttle=[AnonRateThrottle("20/h")])
+@transaction.atomic
+def book_handoff(request, token: UUID, payload: HandoffBookingSchema):
+    """Whoever books must be in the group, and must say the others agreed to the time."""
+    item = (
+        HandoffItem.objects.select_for_update()
+        .select_related("course", "group_type")
+        .filter(signup_token=token)
+        .first()
+    )
+    if item is None:
+        raise HttpError(404, "This booking form is closed or does not exist")
+    if not payload.teammates_confirmed:
+        raise HttpError(422, "Confirm that your teammates agreed to this time")
+
+    student = Student.objects.filter(
+        course_id=item.course_id, student_id=payload.student_id.strip()
+    ).first()
+    if student is None:
+        raise HttpError(422, f"Not enrolled in {item.course.code}: {payload.student_id}")
+
+    group = Group.objects.filter(type=item.group_type, members=student).first()
+    if group is None:
+        raise HttpError(422, f"You are not in a {item.group_type.title} group yet")
+
+    slot = item.slots.filter(pk=payload.slot_id).first()
+    if slot is None:
+        raise HttpError(404, "Slot not found")
+    if slot.group_id is not None:
+        raise HttpError(409, "That slot has just been taken")
+
+    booked = item.slots.filter(group=group).first()
+    if booked is not None:
+        raise HttpError(409, f"{item.group_type.title} {group.number} already booked {booked.start:%Y-%m-%d %H:%M}")
+
+    slot.group = group
+    slot.booked_by = student
+    slot.teammates_confirmed = True
+    slot.save(update_fields=["group", "booked_by", "teammates_confirmed"])
+    return 201, {"detail": f"Booked {slot.start:%Y-%m-%d %H:%M} for {item.group_type.title} {group.number}"}

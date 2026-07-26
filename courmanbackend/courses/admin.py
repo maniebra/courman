@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from courses.models import Course, Group, GroupType, Student
+from courses.models import Course, Group, GroupType, HandoffItem, HandoffSlot, Student
 
 
 @admin.register(Course)
@@ -29,3 +29,15 @@ class StudentAdmin(admin.ModelAdmin):
     list_display = ("student_id", "name", "course")
     search_fields = ("student_id", "name", "course__code")
     list_filter = ("course",)
+
+
+@admin.register(HandoffItem)
+class HandoffItemAdmin(admin.ModelAdmin):
+    list_display = ("title", "course", "group_type")
+    list_filter = ("course",)
+
+
+@admin.register(HandoffSlot)
+class HandoffSlotAdmin(admin.ModelAdmin):
+    list_display = ("item", "ta", "start", "end", "group")
+    list_filter = ("item", "ta")

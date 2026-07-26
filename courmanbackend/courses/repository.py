@@ -1,6 +1,8 @@
+from datetime import timedelta
+
 from django.db.models import Max
 
-from courses.models import Course, Group, GroupType, Student
+from courses.models import Course, Group, GroupType, HandoffItem, HandoffSlot, Student
 from iam.models import User
 
 
@@ -164,3 +166,80 @@ class StudentRepository:
     @staticmethod
     async def delete_student(student: Student) -> None:
         await student.adelete()
+
+
+class HandoffRepository:
+    @staticmethod
+    def list_items(course_id: int):
+        return HandoffItem.objects.filter(course_id=course_id).prefetch_related(
+            "slots__ta", "slots__group__members", "slots__booked_by"
+        )
+
+    @staticmethod
+    async def get_item(item_pk: int) -> HandoffItem:
+        return await HandoffItem.objects.select_related("course", "group_type").prefetch_related(
+            "slots__ta", "slots__group__members", "slots__booked_by"
+        ).aget(pk=item_pk)
+
+    @staticmethod
+    async def create_item(*, course: Course, group_type: GroupType, **fields) -> HandoffItem:
+        item = await HandoffItem.objects.acreate(course=course, group_type=group_type, **fields)
+        return await HandoffRepository.get_item(item.pk)
+
+    @staticmethod
+    async def update_item(item: HandoffItem, **fields) -> HandoffItem:
+        for field, value in fields.items():
+            if value is not None:
+                setattr(item, field, value)
+        await item.asave()
+        return await HandoffRepository.get_item(item.pk)
+
+    @staticmethod
+    async def set_signup_token(item: HandoffItem, token) -> None:
+        """Its own setter because `update_item` treats None as "leave alone"."""
+        item.signup_token = token
+        await item.asave(update_fields=["signup_token", "updated_at"])
+
+    @staticmethod
+    async def delete_item(item: HandoffItem) -> None:
+        await item.adelete()
+
+    @staticmethod
+    async def add_slots(*, item: HandoffItem, ta: User, start, end) -> int:
+        """Slice an availability window into back-to-back slots, resting in between.
+
+        A slot that would run past the end of the window is not offered, and a
+        window submitted twice does not double up: overlaps with what this TA
+        already offers are skipped.
+        """
+        length = timedelta(minutes=item.slot_minutes)
+        step = length + timedelta(minutes=item.break_minutes)
+        taken = [
+            (slot.start, slot.end)
+            async for slot in HandoffSlot.objects.filter(item=item, ta=ta, end__gt=start, start__lt=end)
+        ]
+        made = 0
+        cursor = start
+        while cursor + length <= end:
+            slot_end = cursor + length
+            if not any(cursor < other_end and slot_end > other_start for other_start, other_end in taken):
+                await HandoffSlot.objects.acreate(item=item, ta=ta, start=cursor, end=slot_end)
+                made += 1
+            cursor += step
+        return made
+
+    @staticmethod
+    async def get_slot(slot_pk: int) -> HandoffSlot:
+        return await HandoffSlot.objects.select_related("item__course", "ta").aget(pk=slot_pk)
+
+    @staticmethod
+    async def clear_booking(slot: HandoffSlot) -> None:
+        """Free the window again, keeping it on offer for someone else."""
+        slot.group = None
+        slot.booked_by = None
+        slot.teammates_confirmed = False
+        await slot.asave(update_fields=["group", "booked_by", "teammates_confirmed"])
+
+    @staticmethod
+    async def delete_slot(slot: HandoffSlot) -> None:
+        await slot.adelete()

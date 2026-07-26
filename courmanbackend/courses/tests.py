@@ -2,7 +2,7 @@ import json
 
 from django.test import TestCase
 
-from courses.models import Course, Student
+from courses.models import Course, HandoffSlot, Student
 from iam.models import User
 
 
@@ -295,3 +295,142 @@ class CourseCrudTests(TestCase):
             data={"username": "admin", "password": "s3cret-pass"},
             content_type="application/json",
         )
+
+    async def test_handoff_booking(self):
+        admin = await self._login_admin()
+        course = await Course.objects.acreate(code="CS600", name="Handoffs")
+        alone = await Student.objects.acreate(course=course, student_id="1")
+        teammate = await Student.objects.acreate(course=course, student_id="2")
+        outsider = await Student.objects.acreate(course=course, student_id="3")
+
+        type_pk = _json(
+            await self.async_client.post(
+                f"/api/courses/{course.id}/group-types",
+                data={"title": "Project", "min_members": 1, "max_members": 2},
+                content_type="application/json",
+            )
+        )["id"]
+        group_pk = _json(
+            await self.async_client.post(f"/api/courses/{course.id}/group-types/{type_pk}/groups")
+        )["groups"][0]["id"]
+        for student in (alone, teammate):
+            await self.async_client.post(f"/api/courses/{course.id}/groups/{group_pk}/members/{student.id}")
+
+        item = _json(
+            await self.async_client.post(
+                f"/api/courses/{course.id}/handoffs",
+                data={
+                    "group_type": type_pk,
+                    "title": "Phase 1",
+                    "description": "Bring your laptop",
+                    "slot_minutes": 20,
+                    "break_minutes": 10,
+                },
+                content_type="application/json",
+            )
+        )
+        item_pk = item["id"]
+
+        backwards = await self.async_client.post(
+            f"/api/courses/{course.id}/handoffs/{item_pk}/slots",
+            data={"start": "2026-09-01T12:00:00Z", "end": "2026-09-01T11:00:00Z"},
+            content_type="application/json",
+        )
+        self.assertEqual(backwards.status_code, 422)
+
+        # a 60 minute window at 20 + 10 gives 10:00, 10:30, 11:00 - the 11:30 one would overrun
+        slots = _json(
+            await self.async_client.post(
+                f"/api/courses/{course.id}/handoffs/{item_pk}/slots",
+                data={"start": "2026-09-01T10:00:00Z", "end": "2026-09-01T11:20:00Z"},
+                content_type="application/json",
+            )
+        )["slots"]
+        self.assertEqual(
+            [slot["start"][11:16] for slot in slots], ["10:00", "10:30", "11:00"]
+        )
+        self.assertEqual([slot["end"][11:16] for slot in slots], ["10:20", "10:50", "11:20"])
+        self.assertEqual({slot["ta"]["username"] for slot in slots}, {"admin"})
+
+        # the same window again adds nothing
+        again = await self.async_client.post(
+            f"/api/courses/{course.id}/handoffs/{item_pk}/slots",
+            data={"start": "2026-09-01T10:00:00Z", "end": "2026-09-01T11:20:00Z"},
+            content_type="application/json",
+        )
+        self.assertEqual(again.status_code, 422)
+
+        first, second = (slot["id"] for slot in slots[:2])
+
+        token = _json(
+            await self.async_client.patch(
+                f"/api/courses/{course.id}/handoffs/{item_pk}",
+                data={"signup_open": True},
+                content_type="application/json",
+            )
+        )["signup_token"]
+        await self.async_client.post("/api/iam/auth/logout")
+
+        form = await self.async_client.get(f"/api/courses/public/handoff-forms/{token}")
+        self.assertEqual(len(_json(form)["slots"]), 3)
+        self.assertFalse(_json(form)["slots"][0]["taken"])
+        # TAs are hidden by default, and shown once the staff turn that off
+        self.assertEqual(_json(form)["slots"][0]["ta"], "")
+        await self._login_admin_again()
+        await self.async_client.patch(
+            f"/api/courses/{course.id}/handoffs/{item_pk}",
+            data={"hide_ta": False},
+            content_type="application/json",
+        )
+        await self.async_client.post("/api/iam/auth/logout")
+        shown = await self.async_client.get(f"/api/courses/public/handoff-forms/{token}")
+        self.assertEqual(_json(shown)["slots"][0]["ta"], "admin")
+
+        async def book(student_id, slot_id, confirmed=True):
+            return await self.async_client.post(
+                f"/api/courses/public/handoff-forms/{token}",
+                data={"student_id": student_id, "slot_id": slot_id, "teammates_confirmed": confirmed},
+                content_type="application/json",
+            )
+
+        self.assertEqual((await book("1", first, confirmed=False)).status_code, 422)  # unticked
+        self.assertEqual((await book("404", first)).status_code, 422)  # not enrolled
+        self.assertEqual((await book("3", first)).status_code, 422)  # enrolled, but groupless
+
+        booked = await book("1", first)
+        self.assertEqual(booked.status_code, 201)
+        self.assertIn("Project 1", _json(booked)["detail"])
+
+        self.assertEqual((await book("2", first)).status_code, 409)  # slot gone
+        self.assertEqual((await book("2", second)).status_code, 409)  # group already booked
+
+        # a course manager may offer a window on another TA's behalf, but only a TA's
+        await self._login_admin_again()
+        ta = await User.objects.acreate_user(username="ta", password="s3cret-pass")
+        stranger = await User.objects.acreate_user(username="stranger", password="s3cret-pass")
+        await course.tas.aadd(ta)
+        for user, expected in ((ta, 201), (stranger, 422)):
+            response = await self.async_client.post(
+                f"/api/courses/{course.id}/handoffs/{item_pk}/slots",
+                data={"start": "2026-09-02T10:00:00Z", "end": "2026-09-02T11:00:00Z", "ta": user.id},
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, expected)
+        self.assertTrue(await HandoffSlot.objects.filter(item_id=item_pk, ta=ta).aexists())
+
+        slot = await HandoffSlot.objects.aget(pk=first)
+        self.assertEqual(slot.booked_by_id, alone.id)
+        self.assertTrue(slot.teammates_confirmed)
+
+        # staff can free a booked slot, and it goes back on offer
+        cleared = await self.async_client.delete(f"/api/courses/{course.id}/handoff-slots/{first}/booking")
+        self.assertEqual(cleared.status_code, 200)
+        slot = await HandoffSlot.objects.aget(pk=first)
+        self.assertIsNone(slot.group_id)
+        self.assertIsNone(slot.booked_by_id)
+        self.assertFalse(slot.teammates_confirmed)
+        await self.async_client.post("/api/iam/auth/logout")
+        self.assertEqual((await book("2", first)).status_code, 201)
+        self.assertEqual(await course.students.acount(), 3)
+        self.assertEqual(outsider.student_id, "3")
+        self.assertEqual(admin.username, "admin")
