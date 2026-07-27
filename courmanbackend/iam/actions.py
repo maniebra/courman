@@ -19,6 +19,7 @@ class Actions:
     COURSES_MANAGE = "courses.manage"
     COURSE_STAFF_MANAGE = "courses.staff.manage"
     STUDENTS_MANAGE = "students.manage"
+    SETTINGS_MANAGE = "settings.manage"
 
 
 #: name -> what holding it lets you do, seeded into RoleAction
@@ -31,6 +32,7 @@ ACTION_CATALOGUE: dict[str, str] = {
     Actions.COURSES_MANAGE: "Create, edit and delete courses",
     Actions.COURSE_STAFF_MANAGE: "Assign professors, head TAs and TAs to a course",
     Actions.STUDENTS_MANAGE: "Enrol and remove students on a course",
+    Actions.SETTINGS_MANAGE: "Change app-wide settings, such as the language everyone sees",
 }
 
 #: role name -> actions it is seeded with

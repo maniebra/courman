@@ -7,11 +7,13 @@ from ninja.pagination import paginate
 from ninja.security import SessionAuth
 
 from commons.crud import ModelCrudView, aget_or_404
-from iam.models import Role, RoleAction, User
+from iam.models import AppSettings, Role, RoleAction, User
 from iam.actions import ACTION_CATALOGUE, Actions
 from iam.permissions import HasAction
 from iam.repository import RoleActionRepository, RoleRepository, UserRepository
 from iam.schemas import (
+    AppSettingsSchema,
+    AppSettingsUpdateSchema,
     ActionCatalogueSchema,
     UserBriefSchema,
     LoginSchema,
@@ -273,6 +275,31 @@ async def delete_action(request, action_id: int):
     return await action_crud.destroy(action_id)
 
 
+# --- app settings -----------------------------------------------------------
+
+settings_router = Router(tags=["settings"])
+
+
+async def _app_settings() -> AppSettings:
+    """The single settings row, seeded from APP_DEFAULT_LANGUAGE on first read."""
+    row, _ = await AppSettings.objects.aget_or_create(pk=1)
+    return row
+
+
+@settings_router.get("/", response=AppSettingsSchema)
+async def get_app_settings(request):
+    # Unauthenticated: the sign-in page needs the language before anyone logs in.
+    return await _app_settings()
+
+
+@settings_router.put("/", response=AppSettingsSchema, auth=HasAction(Actions.SETTINGS_MANAGE))
+async def update_app_settings(request, payload: AppSettingsUpdateSchema):
+    row = await _app_settings()
+    row.language = payload.language
+    await row.asave()
+    return row
+
+
 # --- combined router --------------------------------------------------------
 
 api = Router()
@@ -280,3 +307,4 @@ api.add_router("/auth", auth_router)
 api.add_router("/users", users_router)
 api.add_router("/roles", roles_router)
 api.add_router("/actions", actions_router)
+api.add_router("/settings", settings_router)

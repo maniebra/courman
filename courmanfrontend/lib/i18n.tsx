@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 
+import { api } from "@/lib/api";
 import en from "@/locales/en.json";
 import faStrings from "@/locales/fa.json";
 
@@ -25,26 +26,27 @@ export type T = (key: Key, vars?: Record<string, string | number>) => string;
 
 const I18nContext = createContext<{
   locale: Locale;
-  setLocale: (l: Locale) => void;
+  setLocale: (l: Locale) => Promise<void>;
   t: T;
 }>({
   locale: "en",
-  setLocale: () => {},
+  setLocale: async () => {},
   t: (key) => en[key],
 });
 
-const STORAGE_KEY = "courman.locale";
 export const dirOf = (locale: Locale) => (locale === "fa" ? "rtl" : "ltr");
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("en");
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    // localStorage is only readable after hydration, so reading it in an effect is
-    // what keeps the SSR markup stable.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (saved === "fa" || saved === "en") setLocaleState(saved);
+    // The language is app-wide and admin-controlled, so it comes from the API
+    // (unauthenticated) rather than from this browser.
+    api
+      .get<{ language: Locale }>("/iam/settings/")
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      .then((res) => setLocaleState(res.data.language))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -52,8 +54,9 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.dir = dirOf(locale);
   }, [locale]);
 
-  const setLocale = useCallback((l: Locale) => {
-    localStorage.setItem(STORAGE_KEY, l);
+  /** Changes it for everyone; the API rejects callers without settings.manage. */
+  const setLocale = useCallback(async (l: Locale) => {
+    await api.put("/iam/settings/", { language: l });
     setLocaleState(l);
   }, []);
 

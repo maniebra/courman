@@ -2,7 +2,10 @@
 
 import { Languages, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 
+import { ACTIONS, errorMessage } from "@/lib/api";
+import { useSession } from "@/lib/session";
 import { LOCALES, useI18n, type Locale } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +19,8 @@ import {
 export default function SettingsPage() {
   const { t, locale, setLocale } = useI18n();
   const { resolvedTheme, setTheme } = useTheme();
+  const { can } = useSession();
+  const mayChangeLanguage = can(ACTIONS.settingsManage);
 
   return (
     <>
@@ -57,7 +62,13 @@ export default function SettingsPage() {
             <Languages className="size-4 text-muted-foreground" />
             {t("settings.language")}
           </CardTitle>
-          <CardDescription>{t("settings.languageHint")}</CardDescription>
+          <CardDescription>
+            {t(
+              mayChangeLanguage
+                ? "settings.languageHint"
+                : "settings.languageLocked",
+            )}
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex gap-2">
           {(Object.keys(LOCALES) as Locale[]).map((option) => (
@@ -65,7 +76,12 @@ export default function SettingsPage() {
               key={option}
               variant={locale === option ? "default" : "outline"}
               size="sm"
-              onClick={() => setLocale(option)}
+              disabled={!mayChangeLanguage}
+              onClick={() =>
+                setLocale(option).catch((err) =>
+                  toast.error(errorMessage(err, t("err.save"))),
+                )
+              }
             >
               {LOCALES[option]}
             </Button>

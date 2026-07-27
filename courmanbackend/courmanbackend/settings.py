@@ -166,6 +166,10 @@ AUTH_USER_MODEL = "iam.User"
 
 LANGUAGE_CODE = 'en-us'
 
+# Seeds the app-wide language row (iam.AppSettings) the first time it is read;
+# admins change it at runtime from the panel, and this value stops mattering.
+APP_DEFAULT_LANGUAGE = os.environ.get("APP_DEFAULT_LANGUAGE", "en").lower()
+
 TIME_ZONE = 'UTC'
 
 USE_I18N = True

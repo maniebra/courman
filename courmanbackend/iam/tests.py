@@ -300,3 +300,32 @@ class ActionBasedAccessTests(TestCase):
         body = _json(response)
         self.assertEqual([a["name"] for a in body], list(ACTION_CATALOGUE))
         self.assertTrue(all(a["description"] for a in body))
+
+
+class AppSettingsTests(TestCase):
+    _user_with = ActionBasedAccessTests._user_with
+    _login = ActionBasedAccessTests._login
+
+    async def test_language_is_readable_without_logging_in(self):
+        response = await self.async_client.get("/api/iam/settings/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(_json(response)["language"], "en")
+
+    async def test_only_settings_managers_may_change_it(self):
+        await self._user_with("nobody", Actions.USERS_MANAGE)
+        await self._login("nobody")
+        denied = await self.async_client.put(
+            "/api/iam/settings/", data={"language": "fa"}, content_type="application/json"
+        )
+        self.assertEqual(denied.status_code, 401)
+
+        await self._user_with("admin2", Actions.SETTINGS_MANAGE)
+        await self._login("admin2")
+        allowed = await self.async_client.put(
+            "/api/iam/settings/", data={"language": "fa"}, content_type="application/json"
+        )
+        self.assertEqual(allowed.status_code, 200)
+
+        # and it is now the language everyone, signed in or not, gets
+        await self.async_client.post("/api/iam/auth/logout")
+        self.assertEqual(_json(await self.async_client.get("/api/iam/settings/"))["language"], "fa")

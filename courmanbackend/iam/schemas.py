@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from ninja import ModelSchema, Schema
 
@@ -102,3 +102,13 @@ class LoginSchema(Schema):
 
 class MessageSchema(Schema):
     detail: str
+
+
+class AppSettingsSchema(Schema):
+    """The settings that apply to every user, not just the caller."""
+
+    language: str
+
+
+class AppSettingsUpdateSchema(Schema):
+    language: Literal["en", "fa"]

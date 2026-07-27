@@ -52,6 +52,7 @@ export const ACTIONS = {
   coursesManage: "courses.manage",
   courseStaffManage: "courses.staff.manage",
   studentsManage: "students.manage",
+  settingsManage: "settings.manage",
 } as const;
 
 export type Course = {
