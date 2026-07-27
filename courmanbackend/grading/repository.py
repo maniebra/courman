@@ -1,3 +1,5 @@
+from django.db.models import Q
+
 from courses.models import Course
 from grading.models import GradingComponent, GradingSheet, GradingTask, Score, SubGrade
 from iam.models import User
@@ -6,16 +8,22 @@ from iam.models import User
 class GradingComponentRepository:
     @staticmethod
     def list_components(course_id: int):
-        return GradingComponent.objects.filter(course_id=course_id).select_related("sheet")
+        return GradingComponent.objects.filter(course_id=course_id).prefetch_related("sheets")
 
     @staticmethod
     async def get_component(component_id: int) -> GradingComponent:
-        return await GradingComponent.objects.select_related("course", "sheet").aget(pk=component_id)
+        return await GradingComponent.objects.select_related("course").prefetch_related("sheets").aget(pk=component_id)
 
     @staticmethod
     async def create_component(*, course: Course, name: str, weight) -> GradingComponent:
         component = await GradingComponent.objects.acreate(course=course, name=name, weight=weight)
         return await GradingComponentRepository.get_component(component.id)
+
+    @staticmethod
+    async def set_public_token(component: GradingComponent, token) -> None:
+        """Its own setter because `update_component` treats None as "leave alone"."""
+        component.public_token = token
+        await component.asave(update_fields=["public_token", "updated_at"])
 
     @staticmethod
     async def update_component(component: GradingComponent, **fields) -> GradingComponent:
@@ -42,8 +50,12 @@ class GradingTaskRepository:
         )
 
     @staticmethod
-    async def create_task(*, component: GradingComponent, assigned_to: User, assigned_by: User) -> GradingTask:
-        task = await GradingTask.objects.acreate(component=component, assigned_to=assigned_to, assigned_by=assigned_by)
+    async def create_task(
+        *, component: GradingComponent, assigned_to: User, assigned_by: User, subgrade: SubGrade | None = None
+    ) -> GradingTask:
+        task = await GradingTask.objects.acreate(
+            component=component, subgrade=subgrade, assigned_to=assigned_to, assigned_by=assigned_by
+        )
         return await GradingTaskRepository.get_task(task.id)
 
     @staticmethod
@@ -57,13 +69,13 @@ class GradingSheetRepository:
         return await GradingSheet.objects.select_related("component__course").aget(pk=sheet_id)
 
     @staticmethod
-    async def get_sheet_for_component(component_id: int) -> GradingSheet:
-        return await GradingSheet.objects.select_related("component__course").aget(component_id=component_id)
+    def list_sheets(component_id: int):
+        return GradingSheet.objects.filter(component_id=component_id).select_related("component__course")
 
     @staticmethod
     async def create_sheet(*, component: GradingComponent, title: str) -> GradingSheet:
-        await GradingSheet.objects.acreate(component=component, title=title)
-        return await GradingSheetRepository.get_sheet_for_component(component.id)
+        sheet = await GradingSheet.objects.acreate(component=component, title=title)
+        return await GradingSheetRepository.get_sheet(sheet.pk)
 
     @staticmethod
     async def update_sheet(sheet: GradingSheet, **fields) -> GradingSheet:
@@ -122,5 +134,18 @@ class GradingSheetRepository:
         return score
 
     @staticmethod
-    async def has_task(component_id: int, user: User) -> bool:
-        return await GradingTask.objects.filter(component_id=component_id, assigned_to=user).aexists()
+    async def has_task(component_id: int, user: User, subgrade_id: int | None = None) -> bool:
+        """A whole-component task covers every column; a scoped one only its own."""
+        tasks = GradingTask.objects.filter(component_id=component_id, assigned_to=user)
+        if subgrade_id is None:
+            return await tasks.aexists()
+        return await tasks.filter(Q(subgrade__isnull=True) | Q(subgrade_id=subgrade_id)).aexists()
+
+    @staticmethod
+    async def graded_subgrade_ids(component_id: int, user: User) -> list[int]:
+        """The columns this user may fill, or [] when they may fill all of them."""
+        return [
+            task.subgrade_id
+            async for task in GradingTask.objects.filter(component_id=component_id, assigned_to=user)
+            if task.subgrade_id is not None
+        ]

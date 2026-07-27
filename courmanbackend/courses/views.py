@@ -587,14 +587,21 @@ def my_todo(request):
         for slot in slots
     ]
 
-    tasks = GradingTask.objects.filter(assigned_to=user).select_related("component__course", "component__sheet")
+    tasks = GradingTask.objects.filter(assigned_to=user).select_related(
+        "component__course", "subgrade__sheet"
+    ).prefetch_related("component__sheets")
     grading = [
         {
             "component_id": task.component_id,
             "course_id": task.component.course_id,
             "course": task.component.course.code,
-            "component": task.component.name,
-            "sheet_id": getattr(task.component, "sheet", None) and task.component.sheet.id,
+            # a scoped task points at one column, so link to that column's sheet
+            "component": f"{task.component.name} · {task.subgrade.name}" if task.subgrade else task.component.name,
+            "sheet_id": (
+                task.subgrade.sheet_id
+                if task.subgrade
+                else next((sheet.id for sheet in task.component.sheets.all()), None)
+            ),
         }
         for task in tasks
     ]

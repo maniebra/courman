@@ -12,6 +12,9 @@ class Course(models.Model):
     head_tas = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="courses_as_head_ta", blank=True)
     tas = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="courses_as_ta", blank=True)
 
+    #: set to publish the read-only grade roll-up at /grades/<token>; cleared to unpublish
+    summary_token = models.UUIDField(null=True, blank=True, unique=True, default=None)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

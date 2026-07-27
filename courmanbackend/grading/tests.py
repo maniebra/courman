@@ -3,7 +3,7 @@ import json
 from django.test import TestCase
 
 from courses.models import Course, Student
-from grading.models import GradingComponent, GradingSheet, GradingTask, SubGrade
+from grading.models import GradingComponent, GradingSheet, GradingTask, SubGrade, Score
 from iam.models import User
 
 
@@ -168,7 +168,7 @@ class GradingSheetTests(TestCase):
         await self._login("sheet-prof")
 
         created = await self.async_client.post(
-            f"/api/grading/components/{component.id}/sheet",
+            f"/api/grading/components/{component.id}/sheets",
             data={"title": "Midterm sheet"},
             content_type="application/json",
         )
@@ -176,9 +176,16 @@ class GradingSheetTests(TestCase):
         sheet_id = _json(created)["id"]
 
         # one sheet per component
+        # a second sheet is fine - q1, q2, q3 of one homework - but not the same title twice
+        second = await self.async_client.post(
+            f"/api/grading/components/{component.id}/sheets",
+            data={"title": "q2"},
+            content_type="application/json",
+        )
+        self.assertEqual(second.status_code, 201)
         duplicate = await self.async_client.post(
-            f"/api/grading/components/{component.id}/sheet",
-            data={"title": "Again"},
+            f"/api/grading/components/{component.id}/sheets",
+            data={"title": "q2"},
             content_type="application/json",
         )
         self.assertEqual(duplicate.status_code, 409)
@@ -254,7 +261,7 @@ class GradingSheetTests(TestCase):
         await self._login("sheet-prof")
         deleted = await self.async_client.delete(f"/api/grading/sheets/{sheet_id}")
         self.assertEqual(deleted.status_code, 200)
-        self.assertFalse(await GradingComponent.objects.filter(sheet__isnull=False).aexists())
+        self.assertEqual(await GradingSheet.objects.filter(component=component).acount(), 1)
 
     async def test_only_assigned_ta_can_enter_scores(self):
         course, prof, ta, other_ta, student, component = await self._setup()
@@ -384,3 +391,104 @@ class GradingSheetTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(allowed.status_code, 201)
+
+    async def test_subgrade_scoped_task_and_course_summary(self):
+        course, prof, ta, other_ta, student, component = await self._setup()
+        sheet = await GradingSheet.objects.acreate(component=component, title="HW1 sheet")
+        q1 = await SubGrade.objects.acreate(sheet=sheet, name="q1", max_score=10)
+        q2 = await SubGrade.objects.acreate(sheet=sheet, name="q2", max_score=10)
+
+        await self._login("sheet-prof")
+        scoped = await self.async_client.post(
+            f"/api/grading/components/{component.id}/tasks",
+            data={"assigned_to_id": ta.id, "subgrade_id": q1.id},
+            content_type="application/json",
+        )
+        self.assertEqual(scoped.status_code, 201)
+
+        # q1 is theirs, q2 is not
+        await self._login("sheet-ta")
+        mine = await self.async_client.put(
+            f"/api/grading/subgrades/{q1.id}/scores/{student.id}",
+            data={"value": 8},
+            content_type="application/json",
+        )
+        self.assertEqual(mine.status_code, 200)
+        theirs = await self.async_client.put(
+            f"/api/grading/subgrades/{q2.id}/scores/{student.id}",
+            data={"value": 8},
+            content_type="application/json",
+        )
+        self.assertEqual(theirs.status_code, 403)
+        full = _json(await self.async_client.get(f"/api/grading/sheets/{sheet.id}/full"))
+        self.assertEqual(full["editable_subgrades"], [q1.id])
+
+        await self._login("sheet-prof")
+        await self.async_client.put(
+            f"/api/grading/subgrades/{q2.id}/scores/{student.id}",
+            data={"value": 6},
+            content_type="application/json",
+        )
+
+        summary = _json(await self.async_client.get(f"/api/grading/courses/{course.id}/summary"))
+        self.assertEqual([c["name"] for c in summary["components"]], [component.name])
+        self.assertEqual(summary["rows"][0]["totals"], [14.0])
+        # 14 of 20 is 70% of the only weighted component
+        self.assertEqual(summary["rows"][0]["grade"], 70.0)
+
+        published = _json(
+            await self.async_client.patch(
+                f"/api/grading/courses/{course.id}/summary",
+                data={"public": True},
+                content_type="application/json",
+            )
+        )
+        token = published["summary_token"]
+        await self.async_client.post("/api/iam/auth/logout")
+        public = _json(await self.async_client.get(f"/api/grading/public/summaries/{token}"))
+        self.assertEqual(public["rows"][0]["grade"], 70.0)
+        self.assertEqual(public["rows"][0]["name"], "")
+
+    async def test_component_sums_its_sheets(self):
+        course, prof, ta, other_ta, student, component = await self._setup()
+        for title, value in (("q1", 8), ("q2", 6)):
+            sheet = await GradingSheet.objects.acreate(component=component, title=title)
+            subgrade = await SubGrade.objects.acreate(sheet=sheet, name="part", max_score=10)
+            await Score.objects.acreate(subgrade=subgrade, student=student, value=value)
+
+        await self._login("sheet-prof")
+        summary = _json(await self.async_client.get(f"/api/grading/components/{component.id}/summary"))
+        self.assertEqual([sheet["title"] for sheet in summary["sheets"]], ["q1", "q2"])
+        self.assertEqual([sheet["subgrades"][0]["name"] for sheet in summary["sheets"]], ["part", "part"])
+        row = summary["rows"][0]
+        self.assertEqual([cell["value"] for cell in row["cells"]], [8.0, 6.0])
+        self.assertEqual(row["sheet_totals"], [8.0, 6.0])
+        self.assertEqual(row["total"], 14.0)
+
+        # the combined grid can be published, and then hides the names
+        published = _json(
+            await self.async_client.patch(
+                f"/api/grading/components/{component.id}",
+                data={"public": True},
+                content_type="application/json",
+            )
+        )
+        token = published["public_token"]
+        self.assertIsNotNone(token)
+        await self.async_client.post("/api/iam/auth/logout")
+        public = _json(await self.async_client.get(f"/api/grading/public/components/{token}"))
+        self.assertEqual(public["rows"][0]["total"], 14.0)
+        self.assertEqual(public["rows"][0]["name"], "")
+        await self._login("sheet-prof")
+        await self.async_client.patch(
+            f"/api/grading/components/{component.id}",
+            data={"public": False},
+            content_type="application/json",
+        )
+        closed = await self.async_client.get(f"/api/grading/public/components/{token}")
+        self.assertEqual(closed.status_code, 404)
+
+        # the course roll-up sees the component as one 14 out of 20
+        course_summary = _json(await self.async_client.get(f"/api/grading/courses/{course.id}/summary"))
+        self.assertEqual(course_summary["rows"][0]["totals"], [14.0])
+        self.assertEqual(course_summary["rows"][0]["grade"], 70.0)

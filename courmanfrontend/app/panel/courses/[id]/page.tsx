@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   FileSpreadsheet,
+  Sigma,
   Link2,
   Pencil,
   Plus,
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { useI18n, type Key } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { Handoffs } from "@/components/handoffs";
+import { GradeSummary } from "@/components/grade-summary";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,9 +83,17 @@ type Component = {
   id: number;
   name: string;
   weight: string;
-  sheet_id: number | null;
+  /** a component may hold several sheets: q1, q2, q3 of one homework */
+  sheets: { id: number; title: string }[];
 };
-type Task = { id: number; assigned_to: Brief; assigned_by: Brief };
+type Task = {
+  id: number;
+  assigned_to: Brief;
+  assigned_by: Brief;
+  /** null for the whole component, otherwise the one column they grade */
+  subgrade: number | null;
+};
+type SubGrade = { id: number; name: string };
 
 /** Course staff m2m: `POST/DELETE /courses/{id}/{path}/{userId}`. */
 const STAFF = [
@@ -208,6 +218,8 @@ export default function CoursePage() {
         graders={users}
         editable={canManageGrading}
       />
+
+      <GradeSummary courseId={course.id} canPublish={canManageGrading} />
     </>
   );
 }
@@ -999,6 +1011,7 @@ function Grading({
                   {open === c.id && (
                     <Tasks
                       componentId={c.id}
+                      sheetId={c.sheets[0]?.id ?? null}
                       graders={graders}
                       editable={editable}
                     />
@@ -1013,6 +1026,7 @@ function Grading({
                     component={c}
                     courseId={courseId}
                     editable={editable}
+                    onChanged={load}
                   />
                 </TableCell>
                 <TableCell>
@@ -1065,62 +1079,101 @@ function SheetLink({
   component,
   courseId,
   editable,
+  onChanged,
 }: {
   component: Component;
   courseId: number;
   editable: boolean;
+  onChanged: () => void;
 }) {
   const { t } = useI18n();
   const router = useRouter();
+  const [title, setTitle] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const href = `/panel/courses/${courseId}/sheets/${component.sheet_id}`;
-  if (component.sheet_id) {
-    return (
-      <Button variant="outline" size="sm" render={<Link href={href} />}>
-        <FileSpreadsheet /> {t("sheet.open")}
-      </Button>
-    );
-  }
-  if (!editable) {
-    return (
-      <span className="text-sm text-muted-foreground">{t("sheet.none")}</span>
-    );
-  }
-
-  async function create() {
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
     setCreating(true);
     try {
       const res = await api.post<{ id: number }>(
-        `/grading/components/${component.id}/sheet`,
-        { title: component.name },
+        `/grading/components/${component.id}/sheets`,
+        { title: title || component.name },
       );
-      router.push(`/panel/courses/${courseId}/sheets/${res.data.id}`);
+      setTitle("");
+      onChanged();
+      if (component.sheets.length === 0)
+        router.push(`/panel/courses/${courseId}/sheets/${res.data.id}`);
     } catch (err) {
       toast.error(errorMessage(err, t("sheet.createError")));
+    } finally {
       setCreating(false);
     }
   }
 
   return (
-    <Button variant="outline" size="sm" onClick={create} disabled={creating}>
-      <Plus /> {t("sheet.create")}
-    </Button>
+    <div className="flex flex-wrap items-center gap-2">
+      {component.sheets.length === 0 && !editable && (
+        <span className="text-sm text-muted-foreground">{t("sheet.none")}</span>
+      )}
+      {component.sheets.map((sheet) => (
+        <Button
+          key={sheet.id}
+          variant="outline"
+          size="sm"
+          render={
+            <Link href={`/panel/courses/${courseId}/sheets/${sheet.id}`} />
+          }
+        >
+          <FileSpreadsheet /> {sheet.title}
+        </Button>
+      ))}
+      {component.sheets.length > 1 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          render={
+            <Link
+              href={`/panel/courses/${courseId}/components/${component.id}`}
+            />
+          }
+        >
+          <Sigma /> {t("sheet.combined")}
+        </Button>
+      )}
+      {editable && (
+        <form className="flex items-center gap-1" onSubmit={create}>
+          <Input
+            className="h-8 w-32"
+            placeholder={t("sheet.newSheet")}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <Button type="submit" variant="outline" size="sm" disabled={creating}>
+            <Plus /> {t("sheet.create")}
+          </Button>
+        </form>
+      )}
+    </div>
   );
 }
 
 function Tasks({
   componentId,
+  sheetId,
   graders,
   editable,
 }: {
   componentId: number;
+  /** when the component has a sheet, a task can be scoped to one of its columns */
+  sheetId: number | null;
   graders: (Brief | User)[];
   editable: boolean;
 }) {
   const { t } = useI18n();
   const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [subgrades, setSubgrades] = useState<SubGrade[]>([]);
   const [picked, setPicked] = useState("");
+  const [part, setPart] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -1137,15 +1190,22 @@ function Tasks({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- setState happens after await
     load();
-  }, [load]);
+    if (sheetId)
+      api
+        .get<SubGrade[]>(`/grading/sheets/${sheetId}/subgrades`)
+        .then((res) => setSubgrades(res.data))
+        .catch(() => setSubgrades([]));
+  }, [load, sheetId]);
 
   async function assign(e: React.FormEvent) {
     e.preventDefault();
     try {
       await api.post(`/grading/components/${componentId}/tasks`, {
         assigned_to_id: Number(picked),
+        subgrade_id: part ? Number(part) : null,
       });
       setPicked("");
+      setPart("");
       load();
     } catch (err) {
       toast.error(errorMessage(err, t("grading.assignError")));
@@ -1180,6 +1240,13 @@ function Tasks({
         {tasks?.map((t) => (
           <Badge key={t.id} variant="secondary" className="gap-1">
             {t.assigned_to.username}
+            {t.subgrade !== null && (
+              <span className="text-muted-foreground">
+                ·{" "}
+                {subgrades.find((s) => s.id === t.subgrade)?.name ??
+                  t.subgrade}
+              </span>
+            )}
             {editable && (
               <button
                 type="button"
@@ -1207,6 +1274,21 @@ function Tasks({
               </option>
             ))}
           </select>
+          {subgrades.length > 0 && (
+            <select
+              aria-label={t("grading.wholeComponent")}
+              className="h-8 rounded-md border bg-transparent px-2 text-sm"
+              value={part}
+              onChange={(e) => setPart(e.target.value)}
+            >
+              <option value="">{t("grading.wholeComponent")}</option>
+              {subgrades.map((sg) => (
+                <option key={sg.id} value={sg.id}>
+                  {sg.name}
+                </option>
+              ))}
+            </select>
+          )}
           <Button type="submit" size="sm" disabled={!picked}>
             {t("grading.assign")}
           </Button>

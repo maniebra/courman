@@ -107,7 +107,7 @@
   "group.item": "گروه",
   "sheet.title": "کاربرگ نمره",
   "sheet.none": "هنوز کاربرگی ساخته نشده است.",
-  "sheet.create": "ساخت کاربرگ",
+  "sheet.create": "افزودن کاربرگ",
   "sheet.open": "باز کردن کاربرگ",
   "sheet.titlePlaceholder": "عنوان کاربرگ",
   "sheet.deleteConfirm": "این کاربرگ و همهٔ نمره‌های آن حذف شود؟",
@@ -214,5 +214,15 @@
   "sheet.publish": "انتشار",
   "sheet.unpublish": "لغو انتشار",
   "sheet.publishHint": "انتشار نسخهٔ فقط‌خواندنی: شمارهٔ دانشجویی و نمره‌ها، بدون نام و توضیح",
-  "sheet.notPublished": "این کاربرگ منتشر نشده است."
+  "sheet.notPublished": "این کاربرگ منتشر نشده است.",
+  "grading.wholeComponent": "کل بخش",
+  "summary.title": "نمره‌های درس",
+  "summary.hint": "همهٔ بخش‌ها کنار هم، با وزن، تا نمرهٔ نهایی.",
+  "summary.grade": "نمره",
+  "summary.publishHint": "انتشار جمع‌بندی فقط‌خواندنی: شمارهٔ دانشجویی و جمع‌ها، بدون نام",
+  "summary.notPublished": "این نمره‌ها منتشر نشده‌اند.",
+  "summary.loadError": "بارگذاری جمع‌بندی نمره‌ها ممکن نشد",
+  "sheet.combined": "جمع‌بندی",
+  "sheet.newSheet": "نام کاربرگ جدید",
+  "sheet.overall": "جمع کل"
 }

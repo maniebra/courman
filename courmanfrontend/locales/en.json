@@ -107,7 +107,7 @@
   "group.item": "group",
   "sheet.title": "Grading sheet",
   "sheet.none": "No grading sheet yet.",
-  "sheet.create": "Create sheet",
+  "sheet.create": "Add sheet",
   "sheet.open": "Open sheet",
   "sheet.titlePlaceholder": "Sheet title",
   "sheet.deleteConfirm": "Delete this sheet and every score on it?",
@@ -214,5 +214,15 @@
   "sheet.publish": "Publish",
   "sheet.unpublish": "Unpublish",
   "sheet.publishHint": "Share a read-only sheet: student IDs and scores, no names or comments",
-  "sheet.notPublished": "This sheet is not published."
+  "sheet.notPublished": "This sheet is not published.",
+  "grading.wholeComponent": "Whole component",
+  "summary.title": "Course grades",
+  "summary.hint": "Every component side by side, weighted into a final grade.",
+  "summary.grade": "Grade",
+  "summary.publishHint": "Share a read-only roll-up: student IDs and totals, no names",
+  "summary.notPublished": "These grades are not published.",
+  "summary.loadError": "Could not load the grade summary",
+  "sheet.combined": "Combined",
+  "sheet.newSheet": "New sheet name",
+  "sheet.overall": "Overall"
 }

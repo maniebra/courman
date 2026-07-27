@@ -45,6 +45,8 @@ type Full = {
   students: Student[];
   scores: Score[];
   can_edit: boolean;
+  /** empty when every column is theirs; otherwise the only ones they may fill */
+  editable_subgrades: number[];
 };
 
 /**
@@ -168,6 +170,11 @@ function Grid({
   onChanged: () => void;
 }) {
   const { t } = useI18n();
+  // a TA assigned to q1 only may type in that column and nowhere else
+  const canEditColumn = (subgradeId: number) =>
+    full.can_edit &&
+    (full.editable_subgrades.length === 0 ||
+      full.editable_subgrades.includes(subgradeId));
   const [name, setName] = useState("");
   const [max, setMax] = useState("100");
   const cells = useRef<(HTMLInputElement | null)[][]>([]);
@@ -395,7 +402,7 @@ function Grid({
                         inputMode="decimal"
                         aria-label={`${student.student_id} - ${sg.name}`}
                         className="w-full bg-transparent px-2 py-1 text-start tabular-nums outline-none focus:bg-primary/10 focus:ring-1 focus:ring-primary focus:ring-inset disabled:text-muted-foreground"
-                        disabled={!full.can_edit}
+                        disabled={!canEditColumn(sg.id)}
                         key={`${sg.id}-${scoreOf(student.id, sg.id)}`}
                         defaultValue={scoreOf(student.id, sg.id)}
                         onKeyDown={(e) => onKeyDown(e, row, col)}
@@ -429,7 +436,7 @@ function Grid({
           initial={
             cellOf(commenting.student.id, commenting.subgrade.id)?.comment ?? ""
           }
-          readOnly={!full.can_edit}
+          readOnly={!canEditColumn(commenting.subgrade.id)}
           onClose={() => setCommenting(null)}
           onSaved={onChanged}
         />
